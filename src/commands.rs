@@ -20,6 +20,8 @@ pub(crate) async fn handle_command(
         "rate" | "comment" | "ratings" | "comments" => context.send_message("Coming soon!").await,
         "boh" | "bohboh" | "bohbohboh" => boh(context, command_name.matches("boh").count()).await,
         "sched" | "schedule" => schedule(context).await?,
+        "incoming" => context.send_message("Incoming TUNE! Get Your Bass Faces On!").await,
+        "face" => context.send_message("Cheer up chatroom crew!, at least you don't have a face that looks like ResonantDnB's!").await,
         _ => {
             warn!(
                 "Unknown command: {}{}",
