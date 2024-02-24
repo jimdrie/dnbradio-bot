@@ -55,14 +55,12 @@ impl EventHandler for Handler {
 
         context
             .send_to_irc(
-                format!(
-                    "<{}> {}",
-                    msg.author_nick(&context.discord_http)
+                &message,
+                Some(
+                    &msg.author_nick(&context.discord_http)
                         .await
                         .unwrap_or(msg.author.global_name.unwrap_or(msg.author.name)),
-                    message
-                )
-                .as_str(),
+                ),
             )
             .await;
 

@@ -77,16 +77,28 @@ impl Context {
             .expect("Could not execute webhook.");
     }
 
-    pub async fn send_to_irc(&self, message: &str) {
-        self.send_to_irc_channel(message, &self.irc_channel).await;
+    pub async fn send_to_irc(&self, message: &str, nick: Option<&str>) {
+        self.send_to_irc_channel(message, &self.irc_channel, nick)
+            .await;
     }
 
-    pub async fn send_to_irc_channel(&self, message: &str, channel: &str) {
+    pub async fn send_to_irc_channel(&self, message: &str, channel: &str, nick: Option<&str>) {
         let irc_sender = self.irc_sender.read().unwrap();
-
-        for line in message.lines() {
-            if let Err(error) = irc_sender.send_privmsg(channel, line) {
+        let prefix = nick.map_or(String::new(), |n| format!("<{}> ", n));
+        let line_count = message.lines().count();
+        for (index, line) in message.lines().enumerate() {
+            let suffix = if nick.is_some() && index >= 4 && index < line_count - 1 {
+                "... (truncated)"
+            } else {
+                ""
+            };
+            if let Err(error) =
+                irc_sender.send_privmsg(channel, &format!("{}{}{}", prefix, line, suffix))
+            {
                 error!("Error sending message to IRC: {:?}", error);
+            }
+            if nick.is_some() && index >= 4 {
+                break;
             }
         }
     }
@@ -99,19 +111,19 @@ impl Context {
 
     pub async fn send_action(&self, action: &str) {
         self.send_to_discord(&format!("_{}_", action)).await;
-        self.send_to_irc(&format!("\x01ACTION {}\x01", action))
+        self.send_to_irc(&format!("\x01ACTION {}\x01", action), None)
             .await;
     }
 
     pub async fn send_message(&self, message: &str) {
         let discord_future = self.send_to_discord(message);
-        let irc_future = self.send_to_irc(message);
+        let irc_future = self.send_to_irc(message, None);
         _ = tokio::join!(discord_future, irc_future);
     }
 
     pub async fn send_shazam(&self, message: &str) {
         let discord_future = self.shazam_discord_channel.say(&self.discord_http, message);
-        let irc_future = self.send_to_irc_channel(message, &self.shazam_irc_channel);
+        let irc_future = self.send_to_irc_channel(message, &self.shazam_irc_channel, None);
         _ = tokio::join!(irc_future, discord_future);
     }
 }
