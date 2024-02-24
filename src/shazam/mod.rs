@@ -1,6 +1,6 @@
 use crate::context::Context;
 use anyhow::{anyhow, Result};
-use log::{error, warn};
+use log::info;
 use serde::{Deserialize, Serialize};
 use std::env;
 
@@ -17,12 +17,11 @@ pub use fingerprinting::communication::recognize_song_from_signature;
 pub use fingerprinting::signature_format::DecodedSignature;
 
 pub fn get_last_sent_track(context: &Context) -> Option<(chrono::NaiveDateTime, String)> {
-    let last_track = context.last_track.lock().unwrap();
-    last_track.clone()
+    context.last_track.read().unwrap().clone()
 }
 
 pub fn set_last_sent_track(context: &Context, track: Option<(chrono::NaiveDateTime, String)>) {
-    let mut last_track = context.last_track.lock().unwrap();
+    let mut last_track = context.last_track.write().unwrap();
     *last_track = track;
 }
 
@@ -33,7 +32,7 @@ pub(crate) async fn start(context: Context) {
         let track = match recognize_from_stream(&input_url).await {
             Ok(track) => track,
             Err(e) => {
-                warn!("Error recognizing song: {:?}", e);
+                info!("Error recognizing song: {:?}", e);
                 continue;
             }
         };
@@ -66,15 +65,12 @@ pub async fn recognize_from_stream(input_url: &str) -> Result<ShazamTrack> {
                 .await
                 .map_err(|e| anyhow!("{e:?}"))?;
             let response: ShazamResponse = serde_json::from_value(response)?;
-            let track = response
-                .track
-                .ok_or(anyhow!("Shazam returned no matches!"))?;
-            Ok(track)
+            match response.track {
+                Some(track) => Ok(track),
+                None => Err(anyhow!("Shazam returned no matches!")),
+            }
         }
-        Err(e) => {
-            error!("Error making signature: {:?}", e);
-            anyhow::bail!("Shazam returned no matches!")
-        }
+        Err(e) => Err(anyhow!("Error making signature: {:?}", e)),
     }
 }
 

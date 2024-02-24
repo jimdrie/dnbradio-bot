@@ -12,15 +12,15 @@ use discord::get_serenity_client;
 use dotenvy::dotenv;
 use serenity::all::ChannelId;
 use std::env;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, RwLock};
 
 #[tokio::main]
 async fn main() {
-    env_logger::init();
     dotenv().ok();
+    env_logger::init();
 
     let mut discord_client = get_serenity_client().await;
-    let mut irc_client = irc::get_irc_client().await;
+    let irc_client = irc::get_irc_client().await;
     let discord_http = discord_client.http.clone();
     let discord_cache = discord_client.cache.clone();
     let irc_sender = irc_client.sender();
@@ -44,10 +44,10 @@ async fn main() {
         discord_cache,
         discord_channel,
         discord_webhook_url,
-        irc_sender,
+        irc_sender: Arc::new(RwLock::new(irc_sender)),
         irc_channel,
         command_prefix,
-        last_track: Arc::new(Mutex::new(None)),
+        last_track: Arc::new(RwLock::new(None)),
         shazam_discord_channel,
         shazam_irc_channel,
     };

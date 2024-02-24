@@ -69,13 +69,26 @@ pub(crate) struct ScheduleResponse {
     pub(crate) is_now: bool,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+struct QueueItem {
+    song: Song,
+}
+
 pub(crate) async fn get_api_response<T>(path: &str) -> Result<T>
 where
     for<'de> T: Deserialize<'de>,
 {
     let mut url = env::var("DNBRADIO_API_URL").expect("DNBRADIO_API_URL must be set");
+    let api_key = env::var("DNBRADIO_API_KEY").expect("DNBRADIO_API_KEY must be set");
     url.push_str(path);
-    let response_text = reqwest::get(url).await?.text().await?;
+    let client = reqwest::Client::new();
+    let response_text = client
+        .get(&url)
+        .header("X-API-Key", api_key)
+        .send()
+        .await?
+        .text()
+        .await?;
     Ok(serde_json::from_str(&response_text)?)
 }
 
@@ -101,6 +114,14 @@ pub(crate) async fn get_schedule() -> Result<Vec<(NaiveDateTime, NaiveDateTime, 
                 schedule.title,
             )
         })
+        .collect())
+}
+
+pub(crate) async fn get_queue() -> Result<Vec<(String, String)>> {
+    let api_response = get_api_response::<Vec<QueueItem>>("station/dnbradio/queue").await?;
+    Ok(api_response
+        .into_iter()
+        .map(|song| (song.song.artist, song.song.title))
         .collect())
 }
 
@@ -144,7 +165,7 @@ pub async fn now_playing_loop(context: Context) {
                 last_time_sent = chrono::Utc::now().naive_utc();
                 last_now_playing_string = Some(now_playing_string.clone());
                 context
-                    .send_message(&format!("{} (Tuned: {})", now_playing_string, listeners))
+                    .send_action(&format!("{} (Tuned: {})", now_playing_string, listeners))
                     .await;
                 _ = context
                     .set_irc_topic(if is_live {

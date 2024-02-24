@@ -31,7 +31,7 @@ struct Handler;
 #[async_trait]
 impl EventHandler for Handler {
     async fn message(&self, ctx: Context, msg: Message) {
-        let mut context = ctx
+        let context = ctx
             .data
             .read()
             .await
@@ -43,6 +43,16 @@ impl EventHandler for Handler {
             return;
         }
 
+        let mut message = msg.content.clone();
+
+        for attachment in &msg.attachments {
+            if !message.is_empty() {
+                message.push_str(&format!(" - {})", attachment.proxy_url));
+            } else {
+                message.push_str(&format!("{}", attachment.proxy_url));
+            }
+        }
+
         context
             .send_to_irc(
                 format!(
@@ -50,15 +60,15 @@ impl EventHandler for Handler {
                     msg.author_nick(&context.discord_http)
                         .await
                         .unwrap_or(msg.author.global_name.unwrap_or(msg.author.name)),
-                    msg.content
+                    message
                 )
                 .as_str(),
             )
             .await;
 
         if msg.content.starts_with(&context.command_prefix) {
-            let command = msg.content[1..].to_owned();
-            if let Err(error) = commands::handle_command(&mut context, &command, false).await {
+            let command = &msg.content[1..];
+            if let Err(error) = commands::handle_command(&context, command, false).await {
                 error!("Error handling command {}: {:?}", command, error);
             }
         }

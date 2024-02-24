@@ -1,10 +1,11 @@
 use crate::context::Context;
+use crate::utils::get_queue;
 use crate::{shazam, utils};
 use anyhow::Result;
-use log::warn;
+use log::{error, warn};
 
 pub(crate) async fn handle_command(
-    context: &mut Context,
+    context: &Context,
     command: &str,
     _is_admin: bool,
 ) -> Result<()> {
@@ -20,6 +21,7 @@ pub(crate) async fn handle_command(
         "rate" | "comment" | "ratings" | "comments" => context.send_message("Coming soon!").await,
         "boh" | "bohboh" | "bohbohboh" => boh(context, command_name.matches("boh").count()).await,
         "sched" | "schedule" => schedule(context).await?,
+        "queue" => queue(context).await?,
         _ => {
             warn!(
                 "Unknown command: {}{}",
@@ -29,7 +31,24 @@ pub(crate) async fn handle_command(
     }
     Ok(())
 }
-async fn now_playing(context: &mut Context) -> Result<()> {
+
+async fn queue(context: &Context) -> Result<()> {
+    match get_queue().await {
+        Ok(queue) => {
+            for (i, (artist, title)) in queue.iter().enumerate() {
+                context
+                    .send_message(&format!("{}) {} - {}", i + 1, artist, title))
+                    .await;
+            }
+        }
+        Err(error) => {
+            error!("Could not get queue: {:?}", error);
+        }
+    }
+    Ok(())
+}
+
+async fn now_playing(context: &Context) -> Result<()> {
     let (artist, title, is_live, listeners) = utils::get_now_playing().await?;
 
     context
@@ -44,7 +63,7 @@ async fn now_playing(context: &mut Context) -> Result<()> {
     Ok(())
 }
 
-async fn listener_count(context: &mut Context) -> Result<()> {
+async fn listener_count(context: &Context) -> Result<()> {
     let (_, _, _, listeners) = utils::get_now_playing().await?;
 
     context
@@ -53,7 +72,7 @@ async fn listener_count(context: &mut Context) -> Result<()> {
     Ok(())
 }
 
-async fn shazam(context: &mut Context) {
+async fn shazam(context: &Context) {
     let last_track = shazam::get_last_sent_track(context);
     match last_track {
         Some((date, track)) => {
@@ -73,7 +92,7 @@ async fn shazam(context: &mut Context) {
     }
 }
 
-async fn boh(context: &mut Context, factor: usize) {
+async fn boh(context: &Context, factor: usize) {
     let rating = 10;
     let bohmeter = format!(
         "BOHMETER [{}] ({}%)",
@@ -87,7 +106,7 @@ async fn boh(context: &mut Context, factor: usize) {
     context.send_message(&bohmeter).await;
 }
 
-async fn schedule(context: &mut Context) -> Result<()> {
+async fn schedule(context: &Context) -> Result<()> {
     let schedule = utils::get_schedule().await?;
     let mut schedule_string = String::new();
     for (start, _, title) in schedule {
