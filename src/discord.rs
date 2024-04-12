@@ -49,24 +49,21 @@ impl EventHandler for Handler {
             if !message.is_empty() {
                 message.push_str(&format!(" - {})", attachment.proxy_url));
             } else {
-                message.push_str(&format!("{}", attachment.proxy_url));
+                message.push_str(&attachment.proxy_url.to_string());
             }
         }
 
-        context
-            .send_to_irc(
-                &message,
-                Some(
-                    &msg.author_nick(&context.discord_http)
-                        .await
-                        .unwrap_or(msg.author.global_name.unwrap_or(msg.author.name)),
-                ),
-            )
-            .await;
+        let nickname = msg
+            .author_nick(&context.discord_http)
+            .await
+            .unwrap_or(msg.author.name);
+
+        context.send_to_irc(&message, Some(&nickname)).await;
 
         if msg.content.starts_with(&context.command_prefix) {
             let command = &msg.content[1..];
-            if let Err(error) = commands::handle_command(&context, command, false).await {
+            if let Err(error) = commands::handle_command(&context, &nickname, command, false).await
+            {
                 error!("Error handling command {}: {:?}", command, error);
             }
         }

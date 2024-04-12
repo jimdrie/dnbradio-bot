@@ -23,7 +23,7 @@ pub struct Context {
 
 impl Context {
     pub async fn send_to_discord(&self, message: &str) {
-        self.send_to_discord_channel(message, &self.discord_channel)
+        self.send_to_discord_channel(&message.replace('|', "\\|"), &self.discord_channel)
             .await;
     }
 
@@ -66,6 +66,7 @@ impl Context {
         let message = self.translate_control_character(0x1D, "*", &message);
         let message = self.translate_control_character(0x1E, "~~", &message);
         let message = self.translate_control_character(0x1F, "__", &message);
+        let message = message.replace('|', "\\|");
 
         let mut builder = ExecuteWebhook::new().username(nickname).content(message);
         if let Some(avatar_url) = avatar_url {
@@ -77,8 +78,8 @@ impl Context {
             .expect("Could not execute webhook.");
     }
 
-    pub async fn send_to_irc(&self, message: &str, nick: Option<&str>) {
-        self.send_to_irc_channel(message, &self.irc_channel, nick)
+    pub async fn send_to_irc(&self, message: &str, nickname: Option<&str>) {
+        self.send_to_irc_channel(message, &self.irc_channel, nickname)
             .await;
     }
 

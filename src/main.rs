@@ -1,9 +1,9 @@
+mod api;
 mod commands;
 mod context;
 mod discord;
 mod irc;
 mod shazam;
-mod utils;
 
 use crate::context::Context;
 use crate::discord::CommandContext;
@@ -63,7 +63,7 @@ async fn main() {
     let irc_handle = tokio::spawn(async move { irc_client.start(irc_context).await });
     let shazam_context = context.clone();
     let shazam_handle = tokio::spawn(async move { shazam::start(shazam_context).await });
-    let now_playing_handle = tokio::spawn(async move { utils::now_playing_loop(context).await });
+    let now_playing_handle = tokio::spawn(async move { api::now_playing_loop(context).await });
 
     _ = tokio::join!(
         discord_handle,

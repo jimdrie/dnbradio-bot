@@ -1,7 +1,6 @@
 use crate::commands;
 use crate::context::Context;
 use anyhow::Result;
-use async_trait::async_trait;
 use futures::StreamExt;
 use irc::client::prelude::*;
 use log::{error, info, warn};
@@ -10,13 +9,11 @@ use std::env;
 use std::sync::Arc;
 use std::time::Duration;
 
-#[async_trait]
 pub(crate) trait IrcClientExt {
-    async fn start(mut self, context: Context);
+    async fn start(self, context: Context);
     async fn message_loop(&mut self, context: &mut Context) -> Result<()>;
 }
 
-#[async_trait]
 impl IrcClientExt for Client {
     async fn start(mut self, mut context: Context) {
         loop {
@@ -35,6 +32,7 @@ impl IrcClientExt for Client {
         let mut stream = self.stream()?;
         while let Some(message) = stream.next().await.transpose()? {
             info!("{:?}", message);
+            let nickname = message.source_nickname().unwrap_or("Unknown");
             match message.command {
                 Command::Response(Response::RPL_ENDOFMOTD, _)
                 | Command::Response(Response::ERR_NOMOTD, _) => {
@@ -55,20 +53,33 @@ impl IrcClientExt for Client {
                     if target != &context.irc_channel {
                         continue;
                     }
-                    let nick = message.source_nickname().unwrap_or("Unknown");
                     let avatar_url = get_avatar_url(
                         context.discord_channel,
                         &context.discord_http,
                         &context.discord_cache,
-                        nick,
+                        nickname,
                     )
                     .await;
-                    context.send_to_discord_webhook(nick, msg, avatar_url).await;
+                    context
+                        .send_to_discord_webhook(nickname, msg, avatar_url)
+                        .await;
                     if msg.starts_with(&context.command_prefix) {
                         let command = &msg[1..];
-                        if let Err(error) = commands::handle_command(context, command, false).await
+                        if let Err(error) =
+                            commands::handle_command(context, nickname, command, false).await
                         {
                             warn!("Error handling command {}: {:?}", command, error);
+                        }
+                    }
+                }
+                Command::JOIN(ref channel, _, _) => {
+                    if channel == &context.irc_channel {
+                        // Voice user.
+                        if let Err(error) = self.send(Command::ChannelMODE(
+                            context.irc_channel.to_string(),
+                            vec![Mode::Plus(ChannelMode::Voice, Some(nickname.to_string()))],
+                        )) {
+                            error!("Error setting voice mode: {:?}", error);
                         }
                     }
                 }
@@ -125,13 +136,13 @@ pub async fn get_avatar_url(
     channel_id: ChannelId,
     http: &Arc<Http>,
     cache: &Arc<Cache>,
-    nick: &str,
+    nickname: &str,
 ) -> Option<String> {
     if let Ok(channel) = &channel_id.to_channel(&http).await {
         if let Some(guild) = channel.clone().guild() {
             if let Ok(members) = guild.members(cache) {
                 for member in members {
-                    if member.display_name() == nick {
+                    if member.display_name() == nickname {
                         return member.user.avatar_url();
                     }
                 }

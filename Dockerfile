@@ -1,7 +1,7 @@
 FROM rust:alpine AS builder
 RUN apk add --no-cache musl-dev
 WORKDIR /app
-COPY Cargo.toml Cargo.lock ./
+COPY Cargo.toml ./
 RUN mkdir .cargo && cargo vendor > .cargo/config.toml
 RUN echo "fn main() {}" > dummy.rs && \
     sed -i 's/src\/main.rs/dummy.rs/g' Cargo.toml && \
