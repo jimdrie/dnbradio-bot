@@ -24,6 +24,7 @@ pub(crate) async fn handle_command(
         "boh" | "bohboh" | "bohbohboh" => boh(context, command_name.matches("boh").count()).await,
         "sched" | "schedule" => schedule(context).await?,
         "queue" => queue(context).await?,
+        "incoming" => context.send_action(&format!("grabs {} and runs yelling INCOMING!", nickname)).await,
         _ => {
             warn!(
                 "Unknown command: {}{}",
@@ -156,7 +157,12 @@ async fn ratings(context: &Context) -> Result<()> {
 
 async fn rate(nickname: &str, context: &Context, args: Vec<&str>) -> Result<()> {
     if args.is_empty() {
-        context.send_message("Usage: rate <rating> [comment]").await;
+        context
+            .send_message(&format!(
+                "Usage: {}rate <rating> [<comment>]",
+                context.command_prefix
+            ))
+            .await;
         return Ok(());
     }
     let now_playing_response = api::get_now_playing().await?;
