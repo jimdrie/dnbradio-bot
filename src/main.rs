@@ -64,7 +64,7 @@ async fn main() {
     let shazam_context = context.clone();
     let shazam_handle = tokio::spawn(async move { shazam::start(shazam_context).await });
     let now_playing_handle = tokio::spawn(async move { api::now_playing_loop(context).await });
-
+    println!("Started! ********************************************************************************");
     _ = tokio::join!(
         discord_handle,
         irc_handle,
