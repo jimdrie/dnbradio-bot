@@ -53,7 +53,7 @@ pub(crate) async fn start(context: Context) {
                     Some((chrono::Utc::now().naive_utc(), track_id.clone())),
                 );
                 context.send_shazam(track_id.as_str()).await;
-                context.send_shazam_to_webhook(last_track).await; // Use ShazamTrack from context
+                context.post_shazam_to_webhook(last_track).await;
             }
         }
         last_track = Some(track.clone());

@@ -10,8 +10,7 @@ use std::env;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-
-// use crate::shazam::ShazamTrack; // Import the correct ShazamTrack
+use crate::{api};
 
 #[derive(Clone)]
 pub struct Context {
@@ -131,7 +130,7 @@ impl Context {
         _ = tokio::join!(irc_future, discord_future);
     }
 
-    pub async fn send_shazam_to_webhook(&self, track: &ShazamTrack) { 
+    pub async fn post_shazam_to_webhook(&self, track: &ShazamTrack) { 
 
         let webhook_url = match env::var("DNBRADIO_WEBHOOK_URL") {
             Ok(url) => url,
@@ -140,6 +139,8 @@ impl Context {
                 return;
             }
         };
+
+        let now_playing_response = api::get_now_playing().await.unwrap();
 
         println!("webhook_url: {:?}", webhook_url);
 
@@ -156,6 +157,8 @@ impl Context {
             "title": track.title,
             "subtitle": track.subtitle,
             "url": track.url,
+            "listener_count": now_playing_response.listeners.current,
+            "date_played": now_playing_response.now_playing.played_at,
         });
 
         let response = client
