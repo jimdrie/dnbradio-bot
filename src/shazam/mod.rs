@@ -1,4 +1,4 @@
-use crate::context::{Context, ShazamTrack}; // Use ShazamTrack from the context module
+use crate::context::{Context};
 use anyhow::{anyhow, Result};
 use log::info;
 use serde::{Deserialize, Serialize};
@@ -81,6 +81,20 @@ pub struct ShazamResponse {
     pub timestamp: u64,
     pub tagid: String,
     pub track: Option<ShazamTrack>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ShazamTrack {
+    pub albumadamid: Option<String>,
+    pub artists: Option<Vec<ShazamSmall>>,
+    pub genres: Option<ShazamGenres>,
+    pub images: Option<ShazamImages>,
+    pub isrc: Option<String>,
+    pub key: String,
+    pub sections: Vec<ShazamSection>,
+    pub title: String,
+    pub subtitle: String,
+    pub url: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

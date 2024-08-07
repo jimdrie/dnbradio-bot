@@ -1,15 +1,13 @@
 use crate::api;
+use crate::shazam::ShazamTrack; // Import ShazamTrack from shazam module
 use anyhow::Result;
 use chrono::NaiveDateTime;
 use irc::client::Sender;
 use irc::proto::Command;
 use log::error;
 use regex::Regex;
-use reqwest::Client;
-use serde::{Deserialize, Serialize};
 use serde_json::json;
 use serenity::all::{Cache, ChannelId, ExecuteWebhook, Http, Webhook};
-use std::env;
 use std::sync::{Arc, RwLock};
 
 #[derive(Clone)]
@@ -165,65 +163,4 @@ impl Context {
             }
         }
     }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ShazamResponse {
-    pub timestamp: u64,
-    pub tagid: String,
-    pub track: Option<ShazamTrack>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ShazamTrack {
-    pub albumadamid: Option<String>,
-    pub artists: Option<Vec<ShazamSmall>>,
-    pub genres: Option<ShazamGenres>,
-    pub images: Option<ShazamImages>,
-    pub isrc: Option<String>,
-    pub key: String,
-    pub sections: Vec<ShazamSection>,
-    pub title: String,
-    pub subtitle: String,
-    pub url: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ShazamSmall {
-    pub adamid: String,
-    pub id: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ShazamGenres {
-    pub primary: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ShazamImages {
-    pub background: String,
-    pub coverart: String,
-    pub coverarthq: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum ShazamSection {
-    MetaSection {
-        metadata: Vec<ShazamMetadataSection>,
-    },
-    ArtistSection {
-        id: String,
-        name: String,
-        tabname: String,
-        #[serde(rename = "type")]
-        type_: String,
-    },
-    Other {},
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ShazamMetadataSection {
-    pub text: String,
-    pub title: String,
 }
