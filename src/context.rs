@@ -1,16 +1,16 @@
+use crate::api;
 use anyhow::Result;
 use chrono::NaiveDateTime;
 use irc::client::Sender;
 use irc::proto::Command;
 use log::error;
 use regex::Regex;
-use serenity::all::{Cache, ChannelId, ExecuteWebhook, Http, Webhook};
-use std::sync::{Arc, RwLock};
-use std::env;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use crate::{api};
+use serenity::all::{Cache, ChannelId, ExecuteWebhook, Http, Webhook};
+use std::env;
+use std::sync::{Arc, RwLock};
 
 #[derive(Clone)]
 pub struct Context {
@@ -28,7 +28,8 @@ pub struct Context {
 
 impl Context {
     pub async fn send_to_discord(&self, message: &str) {
-        self.send_to_discord_channel(&message.replace('|', "\\|"), &self.discord_channel).await;
+        self.send_to_discord_channel(&message.replace('|', "\\|"), &self.discord_channel)
+            .await;
     }
 
     pub async fn send_to_discord_channel(&self, message: &str, channel: &ChannelId) {
@@ -41,23 +42,25 @@ impl Context {
         &self,
         character: u32,
         replacement: &str,
-        message: &str
+        message: &str,
     ) -> String {
         let regex = Regex::new(&format!(r"\x{:02X}(.*?)\x{:02X}", character, character)).unwrap();
         let message = regex.replace_all(message, format!("{}${{1}}{}", replacement, replacement));
         let regex = Regex::new(&format!(r"\x{:02X}(.*)", character)).unwrap();
-        regex.replace_all(&message, format!("{}${{1}}{}", replacement, replacement)).to_string()
+        regex
+            .replace_all(&message, format!("{}${{1}}{}", replacement, replacement))
+            .to_string()
     }
 
     pub async fn send_to_discord_webhook(
         &self,
         nickname: &str,
         message: &str,
-        avatar_url: Option<String>
+        avatar_url: Option<String>,
     ) {
-        let webhook = Webhook::from_url(&self.discord_http, &self.discord_webhook_url).await.expect(
-            "Could not get webhook."
-        );
+        let webhook = Webhook::from_url(&self.discord_http, &self.discord_webhook_url)
+            .await
+            .expect("Could not get webhook.");
 
         // Translate IRC formatting to Discord formatting and strip colour coding
         let action_regex = Regex::new(r"^\x01ACTION (.*)\x01$").unwrap();
@@ -75,12 +78,14 @@ impl Context {
             builder = builder.avatar_url(avatar_url);
         }
         webhook
-            .execute(&self.discord_http, false, builder).await
+            .execute(&self.discord_http, false, builder)
+            .await
             .expect("Could not execute webhook.");
     }
 
     pub async fn send_to_irc(&self, message: &str, nickname: Option<&str>) {
-        self.send_to_irc_channel(message, &self.irc_channel, nickname).await;
+        self.send_to_irc_channel(message, &self.irc_channel, nickname)
+            .await;
     }
 
     pub async fn send_to_irc_channel(&self, message: &str, channel: &str, nick: Option<&str>) {
@@ -93,11 +98,8 @@ impl Context {
             } else {
                 ""
             };
-            if
-                let Err(error) = irc_sender.send_privmsg(
-                    channel,
-                    &format!("{}{}{}", prefix, line, suffix)
-                )
+            if let Err(error) =
+                irc_sender.send_privmsg(channel, &format!("{}{}{}", prefix, line, suffix))
             {
                 error!("Error sending message to IRC: {:?}", error);
             }
@@ -115,7 +117,8 @@ impl Context {
 
     pub async fn send_action(&self, action: &str) {
         self.send_to_discord(&format!("_{}_", action)).await;
-        self.send_to_irc(&format!("\x01ACTION {}\x01", action), None).await;
+        self.send_to_irc(&format!("\x01ACTION {}\x01", action), None)
+            .await;
     }
 
     pub async fn send_message(&self, message: &str) {
@@ -130,21 +133,14 @@ impl Context {
         _ = tokio::join!(irc_future, discord_future);
     }
 
-    pub async fn post_shazam_to_webhook(&self, track: &ShazamTrack) { 
-
-        let webhook_url = match env::var("DNBRADIO_WEBHOOK_URL") {
-            Ok(url) => url,
-            Err(_) => {
-                println!("DNBRADIO_WEBHOOK_URL must be set");
+    pub async fn post_shazam_to_webhook(&self, track: &ShazamTrack) {
+        let now_playing_response = match api::get_now_playing().await {
+            Ok(response) => response,
+            Err(e) => {
+                println!("Failed to get now playing data: {:?}", e);
                 return;
             }
         };
-
-        let now_playing_response = api::get_now_playing().await.unwrap();
-
-        println!("webhook_url: {:?}", webhook_url);
-
-        let client = Client::new();
 
         let payload = json!({
             "albumadamid": track.albumadamid,
@@ -161,24 +157,8 @@ impl Context {
             "date_played": now_playing_response.now_playing.played_at,
         });
 
-        let response = client
-            .post(&webhook_url)
-            .json(&payload)
-            .send()
-            .await;
-
-        match response {
-            Ok(resp) => {
-                if resp.status().is_success() {
-                    println!("Message sent successfully!");
-                } else {
-                    println!(
-                        "Failed to send message. Status: {:?}, Body: {:?}",
-                        resp.status(),
-                        resp.text().await.unwrap_or_else(|_| "Error reading response body".into())
-                    );
-                }
-            }
+        match api::post_dnbradio_webhook_api_response::<_, serde_json::Value>("/", payload).await {
+            Ok(_) => println!("Message sent successfully!"),
             Err(e) => {
                 println!("Error sending message: {:?}", e);
                 println!("Ensure the server is running and accessible.");

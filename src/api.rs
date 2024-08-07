@@ -119,6 +119,18 @@ where
     Ok(serde_json::from_str(&response_text)?)
 }
 
+pub(crate) async fn post_dnbradio_webhook_api_response<T1, T2>(path: &str, body: T1) -> Result<T2>
+where
+    T1: Serialize,
+    for<'de> T2: Deserialize<'de>,
+{
+    let mut url = env::var("DNBRADIO_WEBHOOK_URL").expect("DNBRADIO_WEBHOOK_URL must be set");
+    url.push_str(path);
+    let client = reqwest::Client::new();
+    let response_text = client.post(&url).json(&body).send().await?.text().await?;
+    Ok(serde_json::from_str(&response_text)?)
+}
+
 pub(crate) async fn get_azuracast_api_response<T>(path: &str) -> Result<T>
 where
     for<'de> T: Deserialize<'de>,
