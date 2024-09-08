@@ -1,9 +1,12 @@
+use crate::api;
+use crate::shazam::ShazamTrack; // Import ShazamTrack from shazam module
 use anyhow::Result;
 use chrono::NaiveDateTime;
 use irc::client::Sender;
 use irc::proto::Command;
 use log::error;
 use regex::Regex;
+use serde_json::json;
 use serenity::all::{Cache, ChannelId, ExecuteWebhook, Http, Webhook};
 use std::sync::{Arc, RwLock};
 
@@ -63,9 +66,9 @@ impl Context {
         let message = self.translate_control_character(0x02, "**", &message);
         let colour_regex = Regex::new(r"\x03(?:\d{1,2}(?:,\d{1,2})?)?").unwrap();
         let message = colour_regex.replace_all(&message, "").to_string();
-        let message = self.translate_control_character(0x1D, "*", &message);
-        let message = self.translate_control_character(0x1E, "~~", &message);
-        let message = self.translate_control_character(0x1F, "__", &message);
+        let message = self.translate_control_character(0x1d, "*", &message);
+        let message = self.translate_control_character(0x1e, "~~", &message);
+        let message = self.translate_control_character(0x1f, "__", &message);
         let message = message.replace('|', "\\|");
 
         let mut builder = ExecuteWebhook::new().username(nickname).content(message);
@@ -131,5 +134,38 @@ impl Context {
         let discord_future = self.shazam_discord_channel.say(&self.discord_http, message);
         let irc_future = self.send_to_irc_channel(message, &self.shazam_irc_channel, None);
         _ = tokio::join!(irc_future, discord_future);
+    }
+
+    pub async fn post_shazam_to_webhook(&self, track: &ShazamTrack) {
+        let now_playing_response = match api::get_now_playing().await {
+            Ok(response) => response,
+            Err(e) => {
+                println!("Failed to get now playing data: {:?}", e);
+                return;
+            }
+        };
+
+        let payload = json!({
+            "albumadamid": track.albumadamid,
+            "artists": track.artists,
+            "genres": track.genres,
+            "images": track.images,
+            "isrc": track.isrc,
+            "key": track.key,
+            "sections": track.sections,
+            "title": track.title,
+            "subtitle": track.subtitle,
+            "url": track.url,
+            "listener_count": now_playing_response.listeners.current,
+            "date_played": now_playing_response.now_playing.played_at,
+        });
+
+        match api::post_dnbradio_webhook_api_response::<_, serde_json::Value>("/", payload).await {
+            Ok(_) => println!("Message sent successfully!"),
+            Err(e) => {
+                println!("Error sending message: {:?}", e);
+                println!("Ensure the server is running and accessible.");
+            }
+        }
     }
 }
