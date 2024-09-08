@@ -5,13 +5,13 @@ use serenity::model::channel::Message;
 use serenity::prelude::*;
 use std::env;
 
-pub struct CommandContext;
+pub(crate) struct CommandContext;
 
 impl TypeMapKey for CommandContext {
     type Value = context::Context;
 }
 
-pub async fn get_serenity_client() -> Client {
+pub(crate) async fn get_serenity_client() -> Client {
     let token = env::var("DISCORD_TOKEN").expect("DISCORD_TOKEN must be set");
     let intents = GatewayIntents::non_privileged()
         | GatewayIntents::MESSAGE_CONTENT
@@ -56,13 +56,21 @@ impl EventHandler for Handler {
         let nickname = msg
             .author_nick(&context.discord_http)
             .await
-            .unwrap_or(msg.author.name);
+            .unwrap_or(msg.author.global_name.unwrap_or(msg.author.name));
+
+        let channel = msg
+            .channel_id
+            .to_channel(&context.discord_http)
+            .await
+            .unwrap()
+            .to_string();
 
         context.send_to_irc(&message, Some(&nickname)).await;
 
         if msg.content.starts_with(&context.command_prefix) {
             let command = &msg.content[1..];
-            if let Err(error) = commands::handle_command(&context, &nickname, command, false).await
+            if let Err(error) =
+                commands::handle_command(&context, &channel, &nickname, command, false).await
             {
                 error!("Error handling command {}: {:?}", command, error);
             }

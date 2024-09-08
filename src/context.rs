@@ -22,18 +22,18 @@ pub struct Context {
 }
 
 impl Context {
-    pub async fn send_to_discord(&self, message: &str) {
+    pub(crate) async fn send_to_discord(&self, message: &str) {
         self.send_to_discord_channel(&message.replace('|', "\\|"), &self.discord_channel)
             .await;
     }
 
-    pub async fn send_to_discord_channel(&self, message: &str, channel: &ChannelId) {
+    pub(crate) async fn send_to_discord_channel(&self, message: &str, channel: &ChannelId) {
         if let Err(error) = channel.say(&self.discord_http, message).await {
             error!("Error sending message to Discord: {:?}", error);
         }
     }
 
-    pub fn translate_control_character(
+    pub(crate) fn translate_control_character(
         &self,
         character: u32,
         replacement: &str,
@@ -47,7 +47,7 @@ impl Context {
             .to_string()
     }
 
-    pub async fn send_to_discord_webhook(
+    pub(crate) async fn send_to_discord_webhook(
         &self,
         nickname: &str,
         message: &str,
@@ -78,12 +78,17 @@ impl Context {
             .expect("Could not execute webhook.");
     }
 
-    pub async fn send_to_irc(&self, message: &str, nickname: Option<&str>) {
+    pub(crate) async fn send_to_irc(&self, message: &str, nickname: Option<&str>) {
         self.send_to_irc_channel(message, &self.irc_channel, nickname)
             .await;
     }
 
-    pub async fn send_to_irc_channel(&self, message: &str, channel: &str, nick: Option<&str>) {
+    pub(crate) async fn send_to_irc_channel(
+        &self,
+        message: &str,
+        channel: &str,
+        nick: Option<&str>,
+    ) {
         let irc_sender = self.irc_sender.read().unwrap();
         let prefix = nick.map_or(String::new(), |n| format!("<{}> ", n));
         let line_count = message.lines().count();
@@ -94,7 +99,7 @@ impl Context {
                 ""
             };
             if let Err(error) =
-                irc_sender.send_privmsg(channel, &format!("{}{}{}", prefix, line, suffix))
+                irc_sender.send_privmsg(channel, format!("{}{}{}", prefix, line, suffix))
             {
                 error!("Error sending message to IRC: {:?}", error);
             }
@@ -104,25 +109,25 @@ impl Context {
         }
     }
 
-    pub async fn set_irc_topic(&self, topic: String) -> Result<()> {
+    pub(crate) async fn set_irc_topic(&self, topic: String) -> Result<()> {
         let irc_sender = self.irc_sender.read().unwrap();
         irc_sender.send(Command::TOPIC(self.irc_channel.to_string(), Some(topic)))?;
         Ok(())
     }
 
-    pub async fn send_action(&self, action: &str) {
+    pub(crate) async fn send_action(&self, action: &str) {
         self.send_to_discord(&format!("_{}_", action)).await;
         self.send_to_irc(&format!("\x01ACTION {}\x01", action), None)
             .await;
     }
 
-    pub async fn send_message(&self, message: &str) {
+    pub(crate) async fn send_message(&self, message: &str) {
         let discord_future = self.send_to_discord(message);
         let irc_future = self.send_to_irc(message, None);
         _ = tokio::join!(discord_future, irc_future);
     }
 
-    pub async fn send_shazam(&self, message: &str) {
+    pub(crate) async fn send_shazam(&self, message: &str) {
         let discord_future = self.shazam_discord_channel.say(&self.discord_http, message);
         let irc_future = self.send_to_irc_channel(message, &self.shazam_irc_channel, None);
         _ = tokio::join!(irc_future, discord_future);

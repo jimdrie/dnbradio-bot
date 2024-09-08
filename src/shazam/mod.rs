@@ -1,10 +1,10 @@
 use crate::context::Context;
 use anyhow::{anyhow, Result};
-use log::info;
+use log::debug;
 use serde::{Deserialize, Serialize};
 use std::env;
 
-pub mod fingerprinting {
+pub(crate) mod fingerprinting {
     pub mod algorithm;
     pub mod communication;
     mod hanning;
@@ -16,11 +16,14 @@ pub use fingerprinting::algorithm::SignatureGenerator;
 pub use fingerprinting::communication::recognize_song_from_signature;
 pub use fingerprinting::signature_format::DecodedSignature;
 
-pub fn get_last_sent_track(context: &Context) -> Option<(chrono::NaiveDateTime, String)> {
+pub(crate) fn get_last_sent_track(context: &Context) -> Option<(chrono::NaiveDateTime, String)> {
     context.last_track.read().unwrap().clone()
 }
 
-pub fn set_last_sent_track(context: &Context, track: Option<(chrono::NaiveDateTime, String)>) {
+pub(crate) fn set_last_sent_track(
+    context: &Context,
+    track: Option<(chrono::NaiveDateTime, String)>,
+) {
     let mut last_track = context.last_track.write().unwrap();
     *last_track = track;
 }
@@ -32,7 +35,7 @@ pub(crate) async fn start(context: Context) {
         let track = match recognize_from_stream(&input_url).await {
             Ok(track) => track,
             Err(e) => {
-                info!("Error recognizing song: {:?}", e);
+                debug!("Error recognizing song: {}", e.to_string());
                 continue;
             }
         };
@@ -58,7 +61,7 @@ pub(crate) async fn start(context: Context) {
     }
 }
 
-pub async fn recognize_from_stream(input_url: &str) -> Result<ShazamTrack> {
+async fn recognize_from_stream(input_url: &str) -> Result<ShazamTrack> {
     match SignatureGenerator::make_signature_from_url(input_url).await {
         Ok(signature) => {
             let response = recognize_song_from_signature(&signature)

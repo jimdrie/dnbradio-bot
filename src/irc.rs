@@ -3,7 +3,7 @@ use crate::context::Context;
 use anyhow::Result;
 use futures::StreamExt;
 use irc::client::prelude::*;
-use log::{error, info, warn};
+use log::{debug, error, warn};
 use serenity::all::{Cache, ChannelId, Http};
 use std::env;
 use std::sync::Arc;
@@ -31,7 +31,7 @@ impl IrcClientExt for Client {
     async fn message_loop(&mut self, context: &mut Context) -> Result<()> {
         let mut stream = self.stream()?;
         while let Some(message) = stream.next().await.transpose()? {
-            info!("{:?}", message);
+            debug!("{:?}", message);
             let nickname = message.source_nickname().unwrap_or("Unknown");
             match message.command {
                 Command::Response(Response::RPL_ENDOFMOTD, _)
@@ -41,7 +41,6 @@ impl IrcClientExt for Client {
                         let mut command_parts = perform.split(' ');
                         let command_name = command_parts.next().unwrap_or("");
                         let command_args = command_parts.map(ToOwned::to_owned).collect();
-                        info!("Performing command: {} {:?}", command_name, command_args);
                         if let Err(err) =
                             self.send(Command::Raw(command_name.to_owned(), command_args))
                         {
@@ -66,7 +65,8 @@ impl IrcClientExt for Client {
                     if msg.starts_with(&context.command_prefix) {
                         let command = &msg[1..];
                         if let Err(error) =
-                            commands::handle_command(context, nickname, command, false).await
+                            commands::handle_command(context, target, nickname, command, false)
+                                .await
                         {
                             warn!("Error handling command {}: {:?}", command, error);
                         }
@@ -79,7 +79,7 @@ impl IrcClientExt for Client {
                             context.irc_channel.to_string(),
                             vec![Mode::Plus(ChannelMode::Voice, Some(nickname.to_string()))],
                         )) {
-                            error!("Error setting voice mode: {:?}", error);
+                            warn!("Error setting voice mode: {:?}", error);
                         }
                     }
                 }
@@ -119,10 +119,9 @@ pub async fn get_irc_client() -> Client {
                 .parse::<bool>()
                 .expect("IRC_USE_TLS must be true or false"),
         ),
+        password: env::var("IRC_PASSWORD").ok(),
         ..Config::default()
     };
-
-    println!("{:?}", config);
 
     let client = Client::from_config(config)
         .await

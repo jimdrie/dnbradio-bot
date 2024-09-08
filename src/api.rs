@@ -79,6 +79,7 @@ pub(crate) struct Rating {
     pub(crate) media_type: char,
     pub(crate) user_id: usize,
     pub(crate) rating: f32,
+    pub(crate) channel: String,
     pub(crate) nick: String,
     pub(crate) comment: Option<String>,
 }
@@ -87,13 +88,35 @@ pub(crate) struct Rating {
 pub(crate) struct RateResponse {
     pub(crate) status: String,
     pub(crate) message: String,
-    pub(crate) average_rating: f64,
+    pub(crate) average_rating: f32,
+    pub(crate) comment: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub(crate) struct RatingsResponse {
-    pub(crate) average: f32,
+    pub(crate) average_rating: f32,
     pub(crate) ratings: Vec<Rating>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub(crate) struct Comment {
+    pub(crate) media_id: String,
+    pub(crate) media_type: char,
+    pub(crate) user_id: usize,
+    pub(crate) channel: String,
+    pub(crate) comment: String,
+    pub(crate) nick: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub(crate) struct CommentResponse {
+    pub(crate) status: String,
+    pub(crate) message: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub(crate) struct CommentsResponse {
+    pub(crate) comments: Vec<Comment>,
 }
 
 pub(crate) async fn get_dnbradio_api_response<T>(path: &str) -> Result<T>
@@ -104,6 +127,7 @@ where
     url.push_str(path);
     let client = reqwest::Client::new();
     let response_text = client.get(&url).send().await?.text().await?;
+    log::debug!("API response: {}", response_text);
     Ok(serde_json::from_str(&response_text)?)
 }
 
@@ -116,6 +140,7 @@ where
     url.push_str(path);
     let client = reqwest::Client::new();
     let response_text = client.post(&url).json(&body).send().await?.text().await?;
+    log::debug!("API response: {}", response_text);
     Ok(serde_json::from_str(&response_text)?)
 }
 
@@ -140,9 +165,27 @@ where
 }
 
 pub(crate) async fn get_now_playing() -> Result<NowPlayingResponse> {
-    let api_response =
+    let now_playing_response =
         get_azuracast_api_response::<NowPlayingResponse>("nowplaying/dnbradio").await?;
-    Ok(api_response)
+    let is_live = now_playing_response.live.is_live;
+    let media_id = if is_live {
+        // media_id is not unique for live shows, so we use an MD5 hash of sh_id instead.
+        let sh_id = now_playing_response.now_playing.sh_id;
+        format!("{:x}", md5::compute(sh_id.to_ne_bytes()))
+    } else {
+        now_playing_response.now_playing.song.id
+    };
+    // Replace media_id in the response.
+    Ok(NowPlayingResponse {
+        now_playing: NowPlaying {
+            song: Song {
+                id: media_id,
+                ..now_playing_response.now_playing.song
+            },
+            ..now_playing_response.now_playing
+        },
+        ..now_playing_response
+    })
 }
 
 pub(crate) async fn get_schedule() -> Result<Vec<(DateTime<Utc>, DateTime<Utc>, String)>> {
@@ -174,6 +217,7 @@ pub(crate) async fn set_rating(
     media_type: char,
     user_id: usize,
     rating: f32,
+    channel: String,
     nick: String,
     comment: Option<String>,
 ) -> Result<RateResponse> {
@@ -184,6 +228,7 @@ pub(crate) async fn set_rating(
             media_type,
             user_id,
             rating,
+            channel,
             nick,
             comment,
         },
@@ -198,7 +243,37 @@ pub(crate) async fn get_ratings(song_id: String) -> Result<RatingsResponse> {
     Ok(api_response)
 }
 
-pub async fn now_playing_loop(context: Context) {
+pub(crate) async fn add_comment(
+    media_id: String,
+    media_type: char,
+    user_id: usize,
+    channel: String,
+    nick: String,
+    comment: String,
+) -> Result<CommentResponse> {
+    let api_response = post_dnbradio_api_response::<Comment, CommentResponse>(
+        &format!("media/{}/comment", media_id),
+        Comment {
+            media_id,
+            media_type,
+            user_id,
+            channel,
+            nick,
+            comment,
+        },
+    )
+    .await?;
+    Ok(api_response)
+}
+
+pub(crate) async fn get_comments(song_id: String) -> Result<CommentsResponse> {
+    let api_response =
+        get_dnbradio_api_response::<CommentsResponse>(&format!("media/{}/comment", song_id))
+            .await?;
+    Ok(api_response)
+}
+
+pub(crate) async fn now_playing_loop(context: Context) {
     let now_playing_check_interval = env::var("NOW_PLAYING_CHECK_INTERVAL")
         .expect("NOW_PLAYING_CHECK_INTERVAL must be set")
         .parse()

@@ -5,6 +5,7 @@ use log::{error, warn};
 
 pub(crate) async fn handle_command(
     context: &Context,
+    channel: &str,
     nickname: &str,
     command: &str,
     _is_admin: bool,
@@ -18,10 +19,11 @@ pub(crate) async fn handle_command(
         "count" | "cunts" => listener_count(context).await?,
         "shazam" => shazam(context).await,
         "submit" => context.send_message("If you're interested in becoming a DJ on the station, please email submissions@dnbradio.com!").await,
-        "rate" => rate(nickname, context, command_args).await?,
         "ratings" => ratings(context).await?,
-        "comment" | "comments" => context.send_message("Coming soon!").await,
-        "boh" | "bohboh" | "bohbohboh" => boh(context, command_name.matches("boh").count()).await,
+        "rate" => rate(channel, nickname, context, command_args).await?,
+        "comments" => comments(context).await?,
+        "comment" => comment(channel, nickname, context, command_args).await?,
+        "boh" | "bohboh" | "bohbohboh" => boh(context, command_name.matches("boh").count()).await?,
         "sched" | "schedule" => schedule(context).await?,
         "queue" => queue(context).await?,
         "incoming" => context.send_action(&format!("grabs {} and runs yelling INCOMING!", nickname)).await,
@@ -101,18 +103,19 @@ async fn shazam(context: &Context) {
     }
 }
 
-async fn boh(context: &Context, factor: usize) {
-    let rating = 10;
+async fn boh(context: &Context, factor: usize) -> Result<()> {
+    let now_playing_response = api::get_now_playing().await?;
+    let ratings_response = api::get_ratings(now_playing_response.now_playing.song.id).await?;
+    let rating = ratings_response.average_rating as usize;
+
     let bohmeter = format!(
-        "BOHMETER [{}] ({}%)",
-        " ".repeat(20 * factor)
-            .replace(' ', "|")
-            .chars()
-            .take(rating * 2 * factor)
-            .collect::<String>(),
-        rating * 10 * factor
+        "BOHMETER [{}{}] ({}%)",
+        "█".repeat(rating * factor * 2),
+        " ".repeat((10 * factor - rating * factor) * 2),
+        10 * rating * factor
     );
     context.send_message(&bohmeter).await;
+    Ok(())
 }
 
 async fn schedule(context: &Context) -> Result<()> {
@@ -140,22 +143,28 @@ async fn schedule(context: &Context) -> Result<()> {
 
 async fn ratings(context: &Context) -> Result<()> {
     let now_playing_response = api::get_now_playing().await?;
-    let media_id = now_playing_response.now_playing.song.id;
-    let rating_response = api::get_ratings(media_id).await?;
-    let message = format!(
-        "Ratings for {} - {}:\n",
-        now_playing_response.now_playing.song.artist, now_playing_response.now_playing.song.title
-    );
+    let song = now_playing_response.now_playing.song;
+    let rating_response = api::get_ratings(song.id).await?;
+    if rating_response.ratings.is_empty() {
+        context
+            .send_message(&format!(
+                "No ratings for {} - {} yet",
+                song.artist, song.title
+            ))
+            .await;
+        return Ok(());
+    }
+    let message = format!("Ratings for {} - {}: ", song.artist, song.title);
 
     let message = rating_response.ratings.iter().fold(message, |acc, rating| {
-        format!("{}{}: {}\n", acc, rating.nick, rating.rating)
+        format!("{}{}: {} - ", acc, rating.nick, rating.rating)
     });
-    let message = format!("{}Average: {}", message, rating_response.average);
+    let message = format!("{}Average: {}", message, rating_response.average_rating);
     context.send_message(&message).await;
     Ok(())
 }
 
-async fn rate(nickname: &str, context: &Context, args: Vec<&str>) -> Result<()> {
+async fn rate(channel: &str, nickname: &str, context: &Context, args: Vec<&str>) -> Result<()> {
     if args.is_empty() {
         context
             .send_message(&format!(
@@ -165,25 +174,25 @@ async fn rate(nickname: &str, context: &Context, args: Vec<&str>) -> Result<()> 
             .await;
         return Ok(());
     }
-    let now_playing_response = api::get_now_playing().await?;
-    let is_live = now_playing_response.live.is_live;
-    let media_id = if is_live {
-        // media_id is not unique for live shows, so we use an MD5 hash of sh_id instead.
-        let sh_id = now_playing_response.now_playing.sh_id;
-        format!("{:x}", md5::compute(sh_id.to_ne_bytes()))
-    } else {
-        now_playing_response.now_playing.song.id
-    };
     let Ok(rating) = args[0].parse::<f32>() else {
         context.send_message("Invalid rating").await;
         return Ok(());
     };
+    if !(0.0..=10.0).contains(&rating) {
+        context
+            .send_message("Rating must be between 0 and 10")
+            .await;
+        return Ok(());
+    }
+    let now_playing_response = api::get_now_playing().await?;
+    let is_live = now_playing_response.live.is_live;
 
-    let api_response = api::set_rating(
-        media_id,
+    let rate_response = api::set_rating(
+        now_playing_response.now_playing.song.id,
         if is_live { 'L' } else { 'S' },
         0,
         rating,
+        channel.to_owned(),
         nickname.to_owned(),
         if args.len() > 1 {
             Some(args[1..].join(" "))
@@ -194,11 +203,73 @@ async fn rate(nickname: &str, context: &Context, args: Vec<&str>) -> Result<()> 
     .await?;
     context
         .send_message(&format!(
-            "Rated {} - {} with a {} (new average {})",
+            "Rated {} - {} with {} (new average: {})",
             now_playing_response.now_playing.song.artist,
             now_playing_response.now_playing.song.title,
             rating,
-            api_response.average_rating
+            rate_response.average_rating
+        ))
+        .await;
+    if let Some(comment) = rate_response.comment {
+        context.send_message(&format!("Comment: {}", comment)).await;
+    }
+    Ok(())
+}
+
+async fn comments(context: &Context) -> Result<()> {
+    let now_playing_response = api::get_now_playing().await?;
+    let song = now_playing_response.now_playing.song;
+    let comments_response = api::get_comments(song.id).await?;
+    if comments_response.comments.is_empty() {
+        context
+            .send_message(&format!(
+                "No comments for {} - {} yet",
+                song.artist, song.title
+            ))
+            .await;
+        return Ok(());
+    }
+    let message = format!("Comments for {} - {}: ", song.artist, song.title);
+    let message = comments_response
+        .comments
+        .iter()
+        .fold(message, |acc, comment| {
+            format!("{}{}: {} - ", acc, comment.nick, comment.comment)
+        });
+    context.send_message(&message[0..message.len() - 3]).await;
+    Ok(())
+}
+
+async fn comment(channel: &str, nickname: &str, context: &Context, args: Vec<&str>) -> Result<()> {
+    if args.is_empty() {
+        context
+            .send_message(&format!(
+                "Usage: {}comment <comment>",
+                context.command_prefix
+            ))
+            .await;
+        return Ok(());
+    }
+    let now_playing_response = api::get_now_playing().await?;
+    let is_live = now_playing_response.live.is_live;
+
+    let comment = args.join("");
+
+    api::add_comment(
+        now_playing_response.now_playing.song.id,
+        if is_live { 'L' } else { 'S' },
+        0,
+        channel.to_owned(),
+        nickname.to_owned(),
+        comment.clone(),
+    )
+    .await?;
+    context
+        .send_message(&format!(
+            "Commented added for {} - {}: {}",
+            now_playing_response.now_playing.song.artist,
+            now_playing_response.now_playing.song.title,
+            comment,
         ))
         .await;
     Ok(())

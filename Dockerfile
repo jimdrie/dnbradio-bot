@@ -10,9 +10,9 @@ RUN echo "fn main() {}" > dummy.rs && \
     sed -i 's/dummy.rs/src\/main.rs/g' Cargo.toml && \
     rm -rf target/release/.fingerprint/dnbradio-bot-*
 COPY src src
-RUN cargo install --path .
+RUN cargo build --release
 
 FROM scratch
-COPY --from=builder /usr/local/cargo/bin/dnbradio-bot /dnbradio-bot
+COPY --from=builder /app/target/release/dnbradio-bot /dnbradio-bot
 USER 1000
 CMD ["/dnbradio-bot"]

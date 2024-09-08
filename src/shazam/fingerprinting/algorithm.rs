@@ -309,7 +309,6 @@ impl SignatureGenerator {
                                 fft_pass_number,
                                 peak_magnitude: peak_magnitude as u16,
                                 corrected_peak_frequency_bin,
-                                sample_rate_hz: 16000,
                             });
                     }
                 }
