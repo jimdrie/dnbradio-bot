@@ -53,9 +53,13 @@ impl Context {
         message: &str,
         avatar_url: Option<String>,
     ) {
-        let webhook = Webhook::from_url(&self.discord_http, &self.discord_webhook_url)
-            .await
-            .expect("Could not get webhook.");
+        let webhook = match Webhook::from_url(&self.discord_http, &self.discord_webhook_url).await {
+            Ok(webhook) => webhook,
+            Err(error) => {
+                error!("Failed to get webhook from URL: {:?}", error);
+                return;
+            }
+        };
 
         // Translate IRC formatting to Discord formatting and strip colour coding
         let action_regex = Regex::new(r"^\x01ACTION (.*)\x01$").unwrap();
@@ -72,10 +76,9 @@ impl Context {
         if let Some(avatar_url) = avatar_url {
             builder = builder.avatar_url(avatar_url);
         }
-        webhook
-            .execute(&self.discord_http, false, builder)
-            .await
-            .expect("Could not execute webhook.");
+        if let Err(error) = webhook.execute(&self.discord_http, false, builder).await {
+            error!("Failed to execute webhook: {:?}", error);
+        }
     }
 
     pub(crate) async fn send_to_irc(&self, message: &str, nickname: Option<&str>) {
