@@ -23,7 +23,8 @@ pub(crate) async fn handle_command(
         "rate" => rate(channel, nickname, context, command_args).await?,
         "comments" => comments(context).await?,
         "comment" => comment(channel, nickname, context, command_args).await?,
-        "boh" | "bohboh" | "bohbohboh" => boh(context, command_name.matches("boh").count()).await?,
+        "boh" | "bohboh" | "bohbohboh" => boh(context, command_name.matches("boh").count(), false).await?,
+        "hob" | "hobhob" | "hobhobhob" => boh(context, command_name.matches("hob").count(), true).await?,
         "sched" | "schedule" => schedule(context).await?,
         "queue" => queue(context).await?,
         "incoming" => context.send_action(&format!("grabs {} and runs yelling INCOMING!", nickname)).await,
@@ -103,17 +104,22 @@ async fn shazam(context: &Context) {
     }
 }
 
-async fn boh(context: &Context, factor: usize) -> Result<()> {
+async fn boh(context: &Context, factor: usize, reverse: bool) -> Result<()> {
     let now_playing_response = api::get_now_playing().await?;
     let ratings_response = api::get_ratings(now_playing_response.now_playing.song.id).await?;
     let rating = ratings_response.average_rating as usize;
 
-    let bohmeter = format!(
+    let rating_percentage = 10 * rating * factor;
+    let filled_blocks = "█".repeat(rating * factor * 2);
+    let empty_blocks = " ".repeat((10 * factor - rating * factor) * 2);
+
+    let mut bohmeter = format!(
         "BOHMETER [{}{}] ({}%)",
-        "█".repeat(rating * factor * 2),
-        " ".repeat((10 * factor - rating * factor) * 2),
-        10 * rating * factor
+        filled_blocks, empty_blocks, rating_percentage
     );
+    if reverse {
+        bohmeter = bohmeter.chars().rev().collect();
+    }
     context.send_message(&bohmeter).await;
     Ok(())
 }
