@@ -1,5 +1,6 @@
 services:
   dnbradio-bot:
+    image: ghcr.io/jimdrie/dnbradio-bot:latest
     build:
       context: .
       dockerfile: Dockerfile
