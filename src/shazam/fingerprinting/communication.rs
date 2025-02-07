@@ -1,4 +1,4 @@
-use rand::seq::SliceRandom;
+use rand::seq::IndexedRandom;
 use reqwest::header::HeaderMap;
 use serde_json::{json, Value};
 use std::error::Error;
@@ -43,10 +43,7 @@ pub async fn recognize_song_from_signature(
 
     headers.insert(
         "User-Agent",
-        USER_AGENTS
-            .choose(&mut rand::thread_rng())
-            .unwrap()
-            .parse()?,
+        USER_AGENTS.choose(&mut rand::rng()).unwrap().parse()?,
     );
     headers.insert("Content-Language", "en_US".parse()?);
 
