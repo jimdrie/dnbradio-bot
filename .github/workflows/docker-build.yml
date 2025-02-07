@@ -8,6 +8,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      packages: write
 
     steps:
       - name: Checkout
@@ -23,6 +25,26 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Cache
+        uses: actions/cache@v4
+        id: cache
+        with:
+          path: |
+            registry
+            git
+            sccache
+          key: cache
+
+      - name: Inject cache into Docker
+        uses: reproducible-containers/buildkit-cache-dance@v3
+        with:
+          cache-map: |
+            {
+              "registry": "/usr/local/cargo/registry",
+              "git": "/usr/local/cargo/git",
+              "sccache": "/sccache"
+            }
+
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
@@ -31,3 +53,5 @@ jobs:
           platforms: linux/amd64
           push: true
           tags: ghcr.io/${{ github.repository }}:latest,ghcr.io/${{ github.repository }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
