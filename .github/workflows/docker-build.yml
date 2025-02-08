@@ -3,7 +3,7 @@ name: Build and Push Docker Image to GitHub Container Registry
 on:
   push:
     branches:
-      - main  # You can change this to any branch you want to trigger the build on
+      - main
 
 jobs:
   build:
@@ -50,8 +50,7 @@ jobs:
         with:
           context: .
           file: ./Dockerfile
-          platforms: linux/amd64
           push: true
-          tags: ghcr.io/${{ github.repository }}:latest,ghcr.io/${{ github.repository }}:${{ github.sha }}
+          tags: ghcr.io/${{ github.repository }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
