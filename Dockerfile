@@ -20,6 +20,7 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
     cargo build --release
 
 FROM scratch
+LABEL org.opencontainers.image.description="DnBRadio Discord and IRC bot"
 COPY --from=builder /app/target/release/dnbradio-bot /dnbradio-bot
 USER 1000
 CMD ["/dnbradio-bot"]
