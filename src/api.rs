@@ -161,12 +161,14 @@ where
         .await?
         .text()
         .await?;
+    log::debug!("API response: {}", response_text);
     Ok(serde_json::from_str(&response_text)?)
 }
 
 pub(crate) async fn get_now_playing() -> Result<NowPlayingResponse> {
     let now_playing_response =
         get_azuracast_api_response::<NowPlayingResponse>("nowplaying/dnbradio").await?;
+    log::debug!("Now playing response: {:?}", now_playing_response);
     let is_live = now_playing_response.live.is_live;
     let media_id = if is_live {
         // media_id is not unique for live shows, so we use an MD5 hash of sh_id instead.
@@ -175,6 +177,7 @@ pub(crate) async fn get_now_playing() -> Result<NowPlayingResponse> {
     } else {
         now_playing_response.now_playing.song.id
     };
+
     // Replace media_id in the response.
     Ok(NowPlayingResponse {
         now_playing: NowPlaying {
@@ -289,52 +292,63 @@ pub(crate) async fn now_playing_loop(context: Context) {
     let mut last_time_sent = DateTime::from_timestamp(0, 0).unwrap();
     let mut last_now_playing_string = None;
 
+    log::info!("Starting now playing loop");
     loop {
+        log::debug!("Sleeping for {} seconds", now_playing_check_interval);
         sleep(Duration::from_secs(now_playing_check_interval)).await;
-        if let Ok(now_playing_response) = get_now_playing().await {
-            let NowPlayingResponse {
-                now_playing:
-                    NowPlaying {
-                        song: Song { artist, title, .. },
-                        ..
-                    },
-                listeners: Listeners {
-                    current: listeners, ..
-                },
-                live,
-            } = now_playing_response;
+        match get_now_playing().await {
+            Ok(now_playing_response) => {
+                let NowPlayingResponse {
+                    now_playing:
+                        NowPlaying {
+                            song: Song { artist, title, .. },
+                            ..
+                        },
+                    listeners:
+                        Listeners {
+                            current: listeners, ..
+                        },
+                    live,
+                } = now_playing_response;
 
-            let is_live = live.is_live;
-            let now_playing_string = format!(
-                "np: {} - {}{}",
-                artist,
-                title,
-                if is_live { " **LIVE**" } else { "" }
-            );
+                let is_live = live.is_live;
+                let now_playing_string = format!(
+                    "np: {} - {}{}",
+                    artist,
+                    title,
+                    if is_live { " **LIVE**" } else { "" }
+                );
 
-            let send_message = match last_now_playing_string {
-                Some(ref last) => {
-                    now_playing_string != *last
-                        || (is_live
-                            && chrono::Utc::now() - last_time_sent
-                                > chrono::Duration::seconds(now_playing_live_interval))
+                log::debug!("Now playing: {}", now_playing_string);
+
+                let send_message = match last_now_playing_string {
+                    Some(ref last) => {
+                        now_playing_string != *last
+                            || (is_live
+                                && chrono::Utc::now() - last_time_sent
+                                    > chrono::Duration::seconds(now_playing_live_interval))
+                    }
+                    None => true,
+                };
+
+                if send_message {
+                    log::debug!("Sending now playing message: {}", now_playing_string);
+                    last_time_sent = chrono::Utc::now();
+                    last_now_playing_string = Some(now_playing_string.clone());
+                    context
+                        .send_action(&format!("{} (Tuned: {})", now_playing_string, listeners))
+                        .await;
+                    _ = context
+                        .set_irc_topic(if is_live {
+                            irc_live_topic.format(&[artist, title])
+                        } else {
+                            irc_default_topic.clone()
+                        })
+                        .await;
                 }
-                None => true,
-            };
-
-            if send_message {
-                last_time_sent = chrono::Utc::now();
-                last_now_playing_string = Some(now_playing_string.clone());
-                context
-                    .send_action(&format!("{} (Tuned: {})", now_playing_string, listeners))
-                    .await;
-                _ = context
-                    .set_irc_topic(if is_live {
-                        irc_live_topic.format(&[artist, title])
-                    } else {
-                        irc_default_topic.clone()
-                    })
-                    .await;
+            }
+            Err(e) => {
+                log::error!("Error getting now playing: {e}");
             }
         }
     }
