@@ -1,4 +1,4 @@
-use crate::context::Context;
+use crate::context::{Context};
 use anyhow::{anyhow, Result};
 use log::debug;
 use serde::{Deserialize, Serialize};
@@ -30,7 +30,7 @@ pub(crate) fn set_last_sent_track(
 
 pub(crate) async fn start(context: Context) {
     let input_url = env::var("SHAZAM_INPUT_URL").expect("SHAZAM_INPUT_URL must be set");
-    let mut last_track: Option<String> = None;
+    let mut last_track: Option<ShazamTrack> = None; // Use ShazamTrack from context
     loop {
         let track = match recognize_from_stream(&input_url).await {
             Ok(track) => track,
@@ -39,22 +39,24 @@ pub(crate) async fn start(context: Context) {
                 continue;
             }
         };
-
-        let track = format!("{} - {}", track.subtitle, track.title);
+        println!("{:?}", track);
+        let track_id = format!("{} - {}", track.subtitle, track.title); // This is used for comparison
         let last_sent_track = get_last_sent_track(&context);
-        if let Some((_, last_sent_track)) = last_sent_track {
-            if track == last_sent_track {
+        if let Some((_, last_sent_track_id)) = last_sent_track {
+            if track_id == last_sent_track_id {
                 continue;
             }
         }
 
-        if let Some(last_track) = last_track {
-            if track == last_track {
+        if let Some(last_track) = &last_track {
+            let last_track_id = format!("{} - {}", last_track.subtitle, last_track.title);
+            if track_id == last_track_id {
                 set_last_sent_track(
                     &context,
-                    Some((chrono::Utc::now().naive_utc(), track.clone())),
+                    Some((chrono::Utc::now().naive_utc(), track_id.clone())),
                 );
-                context.send_shazam(last_track.as_str()).await;
+                context.send_shazam(track_id.as_str()).await;
+                context.post_shazam_to_webhook(last_track).await;
             }
         }
         last_track = Some(track.clone());
