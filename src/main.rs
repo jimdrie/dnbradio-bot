@@ -16,6 +16,9 @@ use std::sync::{Arc, RwLock};
 
 #[tokio::main]
 async fn main() {
+    rustls::crypto::ring::default_provider()
+        .install_default()
+        .expect("Failed to install default rustls provider");
     dotenv().ok();
     env_logger::init();
 

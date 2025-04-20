@@ -5,7 +5,7 @@ use crate::shazam::fingerprinting::signature_format::{
 use chfft::RFft1D;
 use dasp::{interpolate::sinc::Sinc, ring_buffer, signal, Sample, Signal};
 use futures::StreamExt;
-use minimp3::{Decoder, Frame};
+use minimp3_fixed::{Decoder, Frame};
 use std::collections::HashMap;
 use std::error::Error;
 
