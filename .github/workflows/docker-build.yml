@@ -1,4 +1,4 @@
-name: Build and Push Docker Image to GitHub Container Registry
+name: Build, Push and Deploy Docker Image
 
 on:
   push:
@@ -54,3 +54,59 @@ jobs:
           tags: ghcr.io/${{ github.repository }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Process .env template
+        run: |
+          export DEPLOY_TIMESTAMP=$(date -u +"%Y-%m-%d %H:%M:%S")
+          envsubst < .env.template > .env
+        env:
+          DNBRADIO_API_URL: ${{ secrets.DNBRADIO_API_URL }}
+          DNBRADIO_AZURACAST_API_URL: ${{ secrets.DNBRADIO_AZURACAST_API_URL }}
+          DNBRADIO_AZURACAST_API_KEY: ${{ secrets.DNBRADIO_AZURACAST_API_KEY }}
+          DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
+          DISCORD_CHANNEL_ID: ${{ secrets.DISCORD_CHANNEL_ID }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          IRC_SERVER: ${{ secrets.IRC_SERVER }}
+          IRC_PORT: ${{ secrets.IRC_PORT }}
+          IRC_USE_TLS: ${{ secrets.IRC_USE_TLS || true }}
+          IRC_NICK: ${{ secrets.IRC_NICK }}
+          IRC_PASSWORD: ${{ secrets.IRC_PASSWORD }}
+          IRC_PERFORM: ${{ secrets.IRC_PERFORM }}
+          IRC_CHANNELS: ${{ secrets.IRC_CHANNELS }}
+          IRC_MAIN_CHANNEL: ${{ secrets.IRC_MAIN_CHANNEL }}
+          SHAZAM_DISCORD_CHANNEL_ID: ${{ secrets.SHAZAM_DISCORD_CHANNEL_ID }}
+          SHAZAM_IRC_CHANNEL: ${{ secrets.SHAZAM_IRC_CHANNEL }}
+
+      - name: Copy compose.yaml and .env to server
+        uses: appleboy/scp-action@v0.1.4
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SSH_PORT || 22 }}
+          source: "compose.yaml,.env"
+          target: "${{ secrets.DEPLOY_DIRECTORY }}"
+
+      - name: Deploy to server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SSH_PORT || 22 }}
+          script: |
+            mkdir -p "${{ secrets.DEPLOY_DIRECTORY }}"
+            cd "${{ secrets.DEPLOY_DIRECTORY }}"
+            echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            docker compose pull
+            docker compose up -d
+            docker logout
