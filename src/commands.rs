@@ -128,7 +128,7 @@ async fn schedule(context: &Context) -> Result<()> {
     let schedule = api::get_schedule().await?;
     let mut schedule_string = String::new();
     for (start, _, title) in schedule {
-        let time_difference = (chrono::Utc::now() - start).num_minutes() - 60;
+        let time_difference = (chrono::Utc::now() - start).num_minutes();
         let mut time_difference_string = if time_difference > -60 {
             format!("{}m", time_difference.abs())
         } else {
