@@ -290,7 +290,7 @@ pub(crate) async fn now_playing_loop(context: Context) {
     let irc_live_topic = env::var("IRC_LIVE_TOPIC").expect("IRC_LIVE_TOPIC must be set");
 
     let mut last_time_sent = DateTime::from_timestamp(0, 0).unwrap();
-    let mut last_now_playing_string = None;
+    let mut last_track_id: Option<String> = None;
 
     log::info!("Starting now playing loop");
     loop {
@@ -312,29 +312,29 @@ pub(crate) async fn now_playing_loop(context: Context) {
                 } = now_playing_response;
 
                 let is_live = live.is_live;
+                let track_id = format!("{} - {}", artist, title);
                 let now_playing_string = format!(
-                    "np: {} - {}{}",
-                    artist,
-                    title,
+                    "np: {}{}",
+                    track_id,
                     if is_live { " **LIVE**" } else { "" }
                 );
 
                 log::debug!("Now playing: {}", now_playing_string);
 
-                let send_message = match last_now_playing_string {
-                    Some(ref last) => {
-                        now_playing_string != *last
-                            || (is_live
-                                && chrono::Utc::now() - last_time_sent
-                                    > chrono::Duration::seconds(now_playing_live_interval))
-                    }
+                let track_changed = match &last_track_id {
+                    Some(last) => track_id != *last,
                     None => true,
                 };
+
+                let send_message = track_changed
+                    || (is_live
+                        && chrono::Utc::now() - last_time_sent
+                            > chrono::Duration::seconds(now_playing_live_interval));
 
                 if send_message {
                     log::debug!("Sending now playing message: {}", now_playing_string);
                     last_time_sent = chrono::Utc::now();
-                    last_now_playing_string = Some(now_playing_string.clone());
+                    last_track_id = Some(track_id);
                     context
                         .send_action(&format!("{} (Tuned: {})", now_playing_string, listeners))
                         .await;
