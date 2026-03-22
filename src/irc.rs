@@ -22,7 +22,13 @@ impl IrcClientExt for Client {
             }
             error!("IRC client disconnected, reconnecting in 10 seconds");
             tokio::time::sleep(Duration::from_secs(10)).await;
-            self = get_irc_client().await;
+            self = match get_irc_client().await {
+                Ok(client) => client,
+                Err(error) => {
+                    error!("Error reconnecting to IRC: {:?}", error);
+                    continue;
+                }
+            };
             let mut irc_sender = context.irc_sender.write().unwrap();
             *irc_sender = self.sender();
         }
@@ -90,7 +96,7 @@ impl IrcClientExt for Client {
     }
 }
 
-pub async fn get_irc_client() -> Client {
+pub async fn get_irc_client() -> Result<Client> {
     let config = Config {
         nickname: Some(
             env::var("IRC_NICK")
@@ -123,12 +129,10 @@ pub async fn get_irc_client() -> Client {
         ..Config::default()
     };
 
-    let client = Client::from_config(config)
-        .await
-        .expect("Error creating client");
-    client.identify().expect("Error identifying to server");
+    let client = Client::from_config(config).await?;
+    client.identify()?;
 
-    client
+    Ok(client)
 }
 
 pub async fn get_avatar_url(

@@ -23,7 +23,9 @@ async fn main() {
     env_logger::init();
 
     let mut discord_client = get_serenity_client().await;
-    let irc_client = irc::get_irc_client().await;
+    let irc_client = irc::get_irc_client()
+        .await
+        .expect("Failed to connect to IRC server");
     let discord_http = discord_client.http.clone();
     let discord_cache = discord_client.cache.clone();
     let irc_sender = irc_client.sender();
