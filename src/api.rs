@@ -4,6 +4,7 @@ use chrono::{DateTime, Utc};
 use dyn_fmt::AsStrFormatExt;
 use serde::{Deserialize, Serialize};
 use std::env;
+use std::sync::atomic::Ordering;
 use std::time::Duration;
 use tokio::time::sleep;
 
@@ -302,6 +303,7 @@ pub(crate) async fn now_playing_loop(context: Context) {
                     now_playing:
                         NowPlaying {
                             song: Song { artist, title, .. },
+                            duration,
                             ..
                         },
                     listeners:
@@ -312,12 +314,12 @@ pub(crate) async fn now_playing_loop(context: Context) {
                 } = now_playing_response;
 
                 let is_live = live.is_live;
+                context
+                    .shazam_active
+                    .store(is_live || duration > 1200, Ordering::Relaxed);
                 let track_id = format!("{} - {}", artist, title);
-                let now_playing_string = format!(
-                    "np: {}{}",
-                    track_id,
-                    if is_live { " **LIVE**" } else { "" }
-                );
+                let now_playing_string =
+                    format!("np: {}{}", track_id, if is_live { " **LIVE**" } else { "" });
 
                 log::debug!("Now playing: {}", now_playing_string);
 
@@ -330,6 +332,10 @@ pub(crate) async fn now_playing_loop(context: Context) {
                     || (is_live
                         && chrono::Utc::now() - last_time_sent
                             > chrono::Duration::seconds(now_playing_live_interval));
+
+                if track_changed && !is_live && duration <= 1200 {
+                    context.send_shazam(&track_id).await;
+                }
 
                 if send_message {
                     log::debug!("Sending now playing message: {}", now_playing_string);

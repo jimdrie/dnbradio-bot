@@ -12,7 +12,7 @@ use discord::get_serenity_client;
 use dotenvy::dotenv;
 use serenity::all::ChannelId;
 use std::env;
-use std::sync::{Arc, RwLock};
+use std::sync::{atomic::AtomicBool, Arc, RwLock};
 
 #[tokio::main]
 async fn main() {
@@ -55,6 +55,7 @@ async fn main() {
         last_track: Arc::new(RwLock::new(None)),
         shazam_discord_channel,
         shazam_irc_channel,
+        shazam_active: Arc::new(AtomicBool::new(false)),
     };
 
     discord_client

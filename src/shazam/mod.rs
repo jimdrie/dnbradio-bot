@@ -3,6 +3,7 @@ use anyhow::{anyhow, Result};
 use log::debug;
 use serde::{Deserialize, Serialize};
 use std::env;
+use std::sync::atomic::Ordering;
 
 pub(crate) mod fingerprinting {
     pub mod algorithm;
@@ -32,10 +33,15 @@ pub(crate) async fn start(context: Context) {
     let input_url = env::var("SHAZAM_INPUT_URL").expect("SHAZAM_INPUT_URL must be set");
     let mut last_track: Option<String> = None;
     loop {
+        if !context.shazam_active.load(Ordering::Relaxed) {
+            tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
+            continue;
+        }
+
         let track = match recognize_from_stream(&input_url).await {
             Ok(track) => track,
             Err(e) => {
-                debug!("Error recognizing song: {}", e.to_string());
+                debug!("Error recognizing song: {e}");
                 continue;
             }
         };

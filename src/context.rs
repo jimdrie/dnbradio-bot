@@ -5,7 +5,7 @@ use irc::proto::Command;
 use log::error;
 use regex::Regex;
 use serenity::all::{Cache, ChannelId, ExecuteWebhook, Http, Webhook};
-use std::sync::{Arc, RwLock};
+use std::sync::{atomic::AtomicBool, Arc, RwLock};
 
 #[derive(Clone)]
 pub struct Context {
@@ -19,6 +19,7 @@ pub struct Context {
     pub(crate) last_track: Arc<RwLock<Option<(NaiveDateTime, String)>>>,
     pub(crate) shazam_discord_channel: ChannelId,
     pub(crate) shazam_irc_channel: String,
+    pub(crate) shazam_active: Arc<AtomicBool>,
 }
 
 impl Context {

@@ -1,3 +1,5 @@
+use std::sync::atomic::Ordering;
+
 use crate::context::Context;
 use crate::{api, shazam};
 use anyhow::Result;
@@ -18,6 +20,7 @@ pub(crate) async fn handle_command(
         "np" | "ch00n" => now_playing(context).await?,
         "count" | "cunts" => listener_count(context).await?,
         "shazam" => shazam(context).await,
+        "id" => id(context, nickname).await?,
         "submit" => context.send_message("If you're interested in becoming a DJ on the station, please email submissions@dnbradio.com!").await,
         "ratings" => ratings(context).await?,
         "rate" => rate(channel, nickname, context, command_args).await?,
@@ -85,6 +88,11 @@ async fn listener_count(context: &Context) -> Result<()> {
 }
 
 async fn shazam(context: &Context) {
+    if !context.shazam_active.load(Ordering::Relaxed) {
+        let _ = now_playing(context).await;
+        return;
+    }
+
     let last_track = shazam::get_last_sent_track(context);
     match last_track {
         Some((date, track)) => {
@@ -102,6 +110,26 @@ async fn shazam(context: &Context) {
             context.send_message("Nothing yet...").await;
         }
     }
+}
+
+async fn id(context: &Context, nickname: &str) -> Result<()> {
+    let now_playing_response = api::get_now_playing().await?;
+    if now_playing_response.live.is_live {
+        let djname = if now_playing_response.live.streamer_name.is_empty() {
+            now_playing_response.now_playing.song.artist.clone()
+        } else {
+            now_playing_response.live.streamer_name.clone()
+        };
+        context
+            .send_message(&format!(
+                "Yo {}! {} wants to know the current track ID!",
+                djname, nickname
+            ))
+            .await;
+    } else {
+        now_playing(context).await?;
+    }
+    Ok(())
 }
 
 async fn boh(context: &Context, factor: usize, reverse: bool) -> Result<()> {
