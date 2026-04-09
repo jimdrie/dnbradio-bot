@@ -66,7 +66,7 @@ impl IrcClientExt for Client {
                     )
                     .await;
                     context
-                        .send_to_discord_webhook(nickname, msg, avatar_url)
+                        .send_to_discord_webhook_relay(nickname, msg, avatar_url)
                         .await;
                     if msg.starts_with(&context.command_prefix) {
                         let command = &msg[1..];

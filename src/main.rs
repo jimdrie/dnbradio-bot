@@ -5,14 +5,14 @@ mod discord;
 mod irc;
 mod shazam;
 
-use crate::context::Context;
+use crate::context::{Context, NpState};
 use crate::discord::CommandContext;
 use crate::irc::IrcClientExt;
 use discord::get_serenity_client;
 use dotenvy::dotenv;
 use serenity::all::ChannelId;
 use std::env;
-use std::sync::{atomic::AtomicBool, Arc, RwLock};
+use std::sync::{atomic::AtomicBool, Arc, Mutex, RwLock};
 
 #[tokio::main]
 async fn main() {
@@ -56,6 +56,11 @@ async fn main() {
         shazam_discord_channel,
         shazam_irc_channel,
         shazam_active: Arc::new(AtomicBool::new(false)),
+        np_state: Arc::new(Mutex::new(NpState {
+            message_id: None,
+            lines: std::collections::VecDeque::new(),
+        })),
+        np_someone_talked: Arc::new(AtomicBool::new(false)),
     };
 
     discord_client

@@ -342,7 +342,10 @@ pub(crate) async fn now_playing_loop(context: Context) {
                     last_time_sent = chrono::Utc::now();
                     last_track_id = Some(track_id);
                     context
-                        .send_action(&format!("{} (Tuned: {})", now_playing_string, listeners))
+                        .send_np_action(
+                            &format!("{} (Tuned: {})", now_playing_string, listeners),
+                            is_live,
+                        )
                         .await;
                     _ = context
                         .set_irc_topic(if is_live {

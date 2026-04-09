@@ -4,6 +4,7 @@ use serenity::async_trait;
 use serenity::model::channel::Message;
 use serenity::prelude::*;
 use std::env;
+use std::sync::atomic::Ordering;
 
 pub(crate) struct CommandContext;
 
@@ -42,6 +43,8 @@ impl EventHandler for Handler {
         if msg.channel_id != context.discord_channel || msg.webhook_id.is_some() || msg.author.bot {
             return;
         }
+
+        context.np_someone_talked.store(true, Ordering::Release);
 
         let mut message = msg.content.clone();
 

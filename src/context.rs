@@ -4,8 +4,12 @@ use irc::client::Sender;
 use irc::proto::Command;
 use log::error;
 use regex::Regex;
-use serenity::all::{Cache, ChannelId, ExecuteWebhook, Http, Webhook};
-use std::sync::{atomic::AtomicBool, Arc, RwLock};
+use serenity::all::{Cache, ChannelId, EditMessage, ExecuteWebhook, Http, MessageId, Webhook};
+use std::collections::VecDeque;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc, Mutex, RwLock,
+};
 
 #[derive(Clone)]
 pub struct Context {
@@ -20,6 +24,13 @@ pub struct Context {
     pub(crate) shazam_discord_channel: ChannelId,
     pub(crate) shazam_irc_channel: String,
     pub(crate) shazam_active: Arc<AtomicBool>,
+    pub(crate) np_state: Arc<Mutex<NpState>>,
+    pub(crate) np_someone_talked: Arc<AtomicBool>,
+}
+
+pub(crate) struct NpState {
+    pub(crate) message_id: Option<MessageId>,
+    pub(crate) lines: VecDeque<String>,
 }
 
 impl Context {
@@ -46,6 +57,17 @@ impl Context {
         regex
             .replace_all(&message, format!("{}${{1}}{}", replacement, replacement))
             .to_string()
+    }
+
+    pub(crate) async fn send_to_discord_webhook_relay(
+        &self,
+        nickname: &str,
+        message: &str,
+        avatar_url: Option<String>,
+    ) {
+        self.np_someone_talked.store(true, Ordering::Release);
+        self.send_to_discord_webhook(nickname, message, avatar_url)
+            .await;
     }
 
     pub(crate) async fn send_to_discord_webhook(
@@ -117,6 +139,68 @@ impl Context {
         let irc_sender = self.irc_sender.read().unwrap();
         irc_sender.send(Command::TOPIC(self.irc_channel.to_string(), Some(topic)))?;
         Ok(())
+    }
+
+    async fn send_np_to_discord(&self, message: &str, replace_last: bool) {
+        const MAX_NP_LINES: usize = 5;
+        let message = message.replace('|', "\\|");
+
+        let someone_talked = self.np_someone_talked.swap(false, Ordering::AcqRel);
+
+        // Determine action while holding the lock, then release before any await.
+        enum NpAction {
+            SendNew(String),
+            EditExisting(MessageId, String),
+        }
+
+        let action = {
+            let mut state = self.np_state.lock().unwrap();
+            if someone_talked {
+                state.message_id = None;
+                state.lines.clear();
+            }
+            if replace_last && !state.lines.is_empty() {
+                *state.lines.back_mut().unwrap() = message.clone();
+            } else {
+                state.lines.push_back(message.clone());
+                if state.lines.len() > MAX_NP_LINES {
+                    state.lines.pop_front();
+                }
+            }
+            let content = state.lines.iter().cloned().collect::<Vec<_>>().join("\n");
+            match state.message_id {
+                None => NpAction::SendNew(content),
+                Some(id) => NpAction::EditExisting(id, content),
+            }
+        }; // MutexGuard dropped here
+
+        match action {
+            NpAction::SendNew(content) => {
+                match self.discord_channel.say(&self.discord_http, &content).await {
+                    Ok(sent_msg) => {
+                        self.np_state.lock().unwrap().message_id = Some(sent_msg.id);
+                    }
+                    Err(e) => error!("Error sending NP message to Discord: {:?}", e),
+                }
+            }
+            NpAction::EditExisting(id, content) => {
+                let builder = EditMessage::new().content(&content);
+                if let Err(e) = self
+                    .discord_channel
+                    .edit_message(&self.discord_http, id, builder)
+                    .await
+                {
+                    error!("Error editing NP message in Discord: {:?}", e);
+                }
+            }
+        }
+    }
+
+    pub(crate) async fn send_np_action(&self, action: &str, replace_last: bool) {
+        self.send_np_to_discord(&format!("_{}_", action), replace_last)
+            .await;
+        self.send_to_irc(&format!("\x01ACTION {}\x01", action), None)
+            .await;
     }
 
     pub(crate) async fn send_action(&self, action: &str) {
