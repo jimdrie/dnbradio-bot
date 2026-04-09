@@ -44,11 +44,11 @@ pub(crate) async fn handle_command(
 async fn queue(context: &Context) -> Result<()> {
     match api::get_queue().await {
         Ok(queue) => {
+            let mut queue_string = String::new();
             for (i, (artist, title)) in queue.iter().enumerate() {
-                context
-                    .send_message(&format!("{}) {} - {}", i + 1, artist, title))
-                    .await;
+                queue_string.push_str(&format!("{}) {} - {}\n", i + 1, artist, title));
             }
+            context.send_message(queue_string.trim_end()).await;
         }
         Err(error) => {
             error!("Could not get queue: {:?}", error);
