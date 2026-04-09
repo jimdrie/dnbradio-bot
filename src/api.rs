@@ -318,8 +318,20 @@ pub(crate) async fn now_playing_loop(context: Context) {
                     .shazam_active
                     .store(is_live || duration > 1200, Ordering::Relaxed);
                 let track_id = format!("{} - {}", artist, title);
-                let now_playing_string =
-                    format!("np: {}{}", track_id, if is_live { " **LIVE**" } else { "" });
+                let streamer_prefix = if is_live
+                    && !live.streamer_name.is_empty()
+                    && !artist.to_lowercase().contains(&live.streamer_name.to_lowercase())
+                {
+                    format!("{} - ", live.streamer_name)
+                } else {
+                    String::new()
+                };
+                let now_playing_string = format!(
+                    "np: {}{}{}",
+                    streamer_prefix,
+                    track_id,
+                    if is_live { " **LIVE**" } else { "" }
+                );
 
                 log::debug!("Now playing: {}", now_playing_string);
 
@@ -349,7 +361,16 @@ pub(crate) async fn now_playing_loop(context: Context) {
                         .await;
                     _ = context
                         .set_irc_topic(if is_live {
-                            irc_live_topic.format(&[artist, title])
+                            let topic_artist = if !live.streamer_name.is_empty()
+                                && !artist
+                                    .to_lowercase()
+                                    .contains(&live.streamer_name.to_lowercase())
+                            {
+                                format!("{} - {}", live.streamer_name, artist)
+                            } else {
+                                artist.clone()
+                            };
+                            irc_live_topic.format(&[topic_artist, title])
                         } else {
                             irc_default_topic.clone()
                         })

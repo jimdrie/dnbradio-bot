@@ -60,10 +60,20 @@ async fn queue(context: &Context) -> Result<()> {
 async fn now_playing(context: &Context) -> Result<()> {
     let now_playing_response = api::get_now_playing().await?;
 
+    let artist = &now_playing_response.now_playing.song.artist;
+    let streamer_prefix = if now_playing_response.live.is_live
+        && !now_playing_response.live.streamer_name.is_empty()
+        && !artist.to_lowercase().contains(&now_playing_response.live.streamer_name.to_lowercase())
+    {
+        format!("{} - ", now_playing_response.live.streamer_name)
+    } else {
+        String::new()
+    };
     context
         .send_message(&format!(
-            "Now playing: {} - {}{} (Tuned: {})",
-            now_playing_response.now_playing.song.artist,
+            "Now playing: {}{} - {}{} (Tuned: {})",
+            streamer_prefix,
+            artist,
             now_playing_response.now_playing.song.title,
             if now_playing_response.live.is_live {
                 " **LIVE**"
