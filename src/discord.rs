@@ -81,6 +81,7 @@ impl EventHandler for Handler {
             .unwrap()
             .to_string();
 
+        let message = context.discord_markdown_to_irc(&message);
         context.send_to_irc(&message, Some(&nickname)).await;
 
         if msg.content.starts_with(&context.command_prefix) {

@@ -45,6 +45,35 @@ impl Context {
         }
     }
 
+    pub(crate) fn discord_markdown_to_irc(&self, message: &str) -> String {
+        // Bold+italic: ***text*** → \x02\x1Dtext\x1D\x02
+        let re = Regex::new(r"\*\*\*(.*?)\*\*\*").unwrap();
+        let message = re.replace_all(message, "\x02\x1D$1\x1D\x02").to_string();
+        // Bold: **text** → \x02text\x02
+        let re = Regex::new(r"\*\*(.*?)\*\*").unwrap();
+        let message = re.replace_all(&message, "\x02$1\x02").to_string();
+        // Strikethrough: ~~text~~ → \x1Etext\x1E
+        let re = Regex::new(r"~~(.*?)~~").unwrap();
+        let message = re.replace_all(&message, "\x1E$1\x1E").to_string();
+        // Underline: __text__ → \x1Ftext\x1F (must come before single _)
+        let re = Regex::new(r"__(.*?)__").unwrap();
+        let message = re.replace_all(&message, "\x1F$1\x1F").to_string();
+        // Italic: *text* or _text_ → \x1Dtext\x1D
+        let re = Regex::new(r"\*(.*?)\*").unwrap();
+        let message = re.replace_all(&message, "\x1D$1\x1D").to_string();
+        let re = Regex::new(r"_(.*?)_").unwrap();
+        re.replace_all(&message, "\x1D$1\x1D").to_string()
+    }
+
+    fn escape_discord_markdown(text: &str) -> String {
+        // Escape characters that trigger Discord markdown formatting
+        text.replace('\\', "\\\\")
+            .replace('_', "\\_")
+            .replace('*', "\\*")
+            .replace('~', "\\~")
+            .replace('|', "\\|")
+    }
+
     pub(crate) fn translate_control_character(
         &self,
         character: u32,
@@ -52,10 +81,24 @@ impl Context {
         message: &str,
     ) -> String {
         let regex = Regex::new(&format!(r"\x{:02X}(.*?)\x{:02X}", character, character)).unwrap();
-        let message = regex.replace_all(message, format!("{}${{1}}{}", replacement, replacement));
+        let message = regex.replace_all(message, |caps: &regex::Captures| {
+            format!(
+                "{}{}{}",
+                replacement,
+                Self::escape_discord_markdown(&caps[1]),
+                replacement
+            )
+        });
         let regex = Regex::new(&format!(r"\x{:02X}(.*)", character)).unwrap();
         regex
-            .replace_all(&message, format!("{}${{1}}{}", replacement, replacement))
+            .replace_all(&message, |caps: &regex::Captures| {
+                format!(
+                    "{}{}{}",
+                    replacement,
+                    Self::escape_discord_markdown(&caps[1]),
+                    replacement
+                )
+            })
             .to_string()
     }
 
@@ -86,7 +129,11 @@ impl Context {
 
         // Translate IRC formatting to Discord formatting and strip colour coding
         let action_regex = Regex::new(r"^\x01ACTION (.*)\x01$").unwrap();
-        let message = action_regex.replace_all(message, "_${1}_").to_string();
+        let message = action_regex
+            .replace_all(message, |caps: &regex::Captures| {
+                format!("_{}_", Self::escape_discord_markdown(&caps[1]))
+            })
+            .to_string();
         let message = self.translate_control_character(0x02, "**", &message);
         let colour_regex = Regex::new(r"\x03(?:\d{1,2}(?:,\d{1,2})?)?").unwrap();
         let message = colour_regex.replace_all(&message, "").to_string();
