@@ -48,6 +48,19 @@ impl EventHandler for Handler {
 
         let mut message = msg.content.clone();
 
+        // Replace Discord user mentions (<@ID>) with display names
+        for user in &msg.mentions {
+            let display_name = user
+                .nick_in(&context.discord_http, msg.guild_id.unwrap_or_default())
+                .await
+                .unwrap_or_else(|| {
+                    user.global_name
+                        .clone()
+                        .unwrap_or_else(|| user.name.clone())
+                });
+            message = message.replace(&format!("<@{}>", user.id), &format!("@{display_name}"));
+        }
+
         for attachment in &msg.attachments {
             if !message.is_empty() {
                 message.push_str(&format!(" - {})", attachment.proxy_url));
