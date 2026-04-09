@@ -46,9 +46,12 @@ impl Context {
     }
 
     pub(crate) fn discord_markdown_to_irc(&self, message: &str) -> String {
+        // Custom emoji: <:name:id> or <a:name:id> → :name:
+        let re = Regex::new(r"<a?:(\w+):\d+>").unwrap();
+        let message = re.replace_all(message, ":$1:").to_string();
         // Bold+italic: ***text*** → \x02\x1Dtext\x1D\x02
         let re = Regex::new(r"\*\*\*(.*?)\*\*\*").unwrap();
-        let message = re.replace_all(message, "\x02\x1D$1\x1D\x02").to_string();
+        let message = re.replace_all(&message, "\x02\x1D$1\x1D\x02").to_string();
         // Bold: **text** → \x02text\x02
         let re = Regex::new(r"\*\*(.*?)\*\*").unwrap();
         let message = re.replace_all(&message, "\x02$1\x02").to_string();
