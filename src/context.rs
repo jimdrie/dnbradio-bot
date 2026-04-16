@@ -68,7 +68,7 @@ impl Context {
         re.replace_all(&message, "\x1D$1\x1D").to_string()
     }
 
-    fn escape_discord_markdown(text: &str) -> String {
+    pub(crate) fn escape_discord_markdown(text: &str) -> String {
         // Escape characters that trigger Discord markdown formatting
         text.replace('\\', "\\\\")
             .replace('_', "\\_")
@@ -247,14 +247,18 @@ impl Context {
     }
 
     pub(crate) async fn send_np_action(&self, action: &str, replace_last: bool) {
-        self.send_np_to_discord(&format!("_{}_", action), replace_last)
-            .await;
+        self.send_np_to_discord(
+            &format!("_{}_", Self::escape_discord_markdown(action)),
+            replace_last,
+        )
+        .await;
         self.send_to_irc(&format!("\x01ACTION {}\x01", action), None)
             .await;
     }
 
     pub(crate) async fn send_action(&self, action: &str) {
-        self.send_to_discord(&format!("_{}_", action)).await;
+        self.send_to_discord(&format!("_{}_", Self::escape_discord_markdown(action)))
+            .await;
         self.send_to_irc(&format!("\x01ACTION {}\x01", action), None)
             .await;
     }

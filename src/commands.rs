@@ -92,8 +92,8 @@ async fn now_playing(context: &Context) -> Result<()> {
         .send_message(&format!(
             "Now playing: {}{} - {}{} (Tuned: {}){}",
             streamer_prefix,
-            artist,
-            now_playing_response.now_playing.song.title,
+            Context::escape_discord_markdown(artist),
+            Context::escape_discord_markdown(&now_playing_response.now_playing.song.title),
             if is_live { " **LIVE**" } else { "" },
             now_playing_response.listeners.current,
             time_str,
