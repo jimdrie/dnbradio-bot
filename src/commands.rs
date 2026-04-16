@@ -57,11 +57,23 @@ async fn queue(context: &Context) -> Result<()> {
     Ok(())
 }
 
+fn format_duration(secs: u64) -> String {
+    let hours = secs / 3600;
+    let minutes = (secs % 3600) / 60;
+    let seconds = secs % 60;
+    if hours > 0 {
+        format!("{hours}:{minutes:02}:{seconds:02}")
+    } else {
+        format!("{minutes}:{seconds:02}")
+    }
+}
+
 async fn now_playing(context: &Context) -> Result<()> {
     let now_playing_response = api::get_now_playing().await?;
 
     let artist = &now_playing_response.now_playing.song.artist;
-    let streamer_prefix = if now_playing_response.live.is_live
+    let is_live = now_playing_response.live.is_live;
+    let streamer_prefix = if is_live
         && !now_playing_response.live.streamer_name.is_empty()
         && !artist.to_lowercase().contains(&now_playing_response.live.streamer_name.to_lowercase())
     {
@@ -69,18 +81,22 @@ async fn now_playing(context: &Context) -> Result<()> {
     } else {
         String::new()
     };
+    let elapsed = now_playing_response.now_playing.elapsed;
+    let duration = now_playing_response.now_playing.duration;
+    let time_str = if is_live || duration == 0 {
+        format!(" [{}]", format_duration(elapsed))
+    } else {
+        format!(" [{}/{}]", format_duration(elapsed), format_duration(duration))
+    };
     context
         .send_message(&format!(
-            "Now playing: {}{} - {}{} (Tuned: {})",
+            "Now playing: {}{} - {}{} (Tuned: {}){}",
             streamer_prefix,
             artist,
             now_playing_response.now_playing.song.title,
-            if now_playing_response.live.is_live {
-                " **LIVE**"
-            } else {
-                ""
-            },
-            now_playing_response.listeners.current
+            if is_live { " **LIVE**" } else { "" },
+            now_playing_response.listeners.current,
+            time_str,
         ))
         .await;
     Ok(())
