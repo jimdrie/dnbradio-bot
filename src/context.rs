@@ -23,6 +23,7 @@ pub struct Context {
     pub(crate) last_track: Arc<RwLock<Option<(NaiveDateTime, String)>>>,
     pub(crate) shazam_discord_channel: ChannelId,
     pub(crate) shazam_irc_channel: String,
+    pub(crate) shazam_emoji: Option<String>,
     pub(crate) shazam_active: Arc<AtomicBool>,
     pub(crate) np_state: Arc<Mutex<NpState>>,
     pub(crate) np_someone_talked: Arc<AtomicBool>,
@@ -269,8 +270,14 @@ impl Context {
         _ = tokio::join!(discord_future, irc_future);
     }
 
-    pub(crate) async fn send_shazam(&self, message: &str) {
-        let discord_future = self.shazam_discord_channel.say(&self.discord_http, message);
+    pub(crate) async fn send_shazam(&self, message: &str, recognised: bool) {
+        let discord_message = match (&self.shazam_emoji, recognised) {
+            (Some(emoji), true) => format!("{emoji} {message}"),
+            _ => message.to_string(),
+        };
+        let discord_future = self
+            .shazam_discord_channel
+            .say(&self.discord_http, discord_message);
         let irc_future = self.send_to_irc_channel(message, &self.shazam_irc_channel, None);
         _ = tokio::join!(irc_future, discord_future);
     }

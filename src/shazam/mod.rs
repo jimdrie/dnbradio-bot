@@ -60,7 +60,7 @@ pub(crate) async fn start(context: Context) {
                     &context,
                     Some((chrono::Utc::now().naive_utc(), track.clone())),
                 );
-                context.send_shazam(last_track.as_str()).await;
+                context.send_shazam(last_track.as_str(), true).await;
             }
         }
         last_track = Some(track.clone());

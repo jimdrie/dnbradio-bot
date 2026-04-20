@@ -85,6 +85,7 @@ jobs:
           IRC_MAIN_CHANNEL: ${{ secrets.IRC_MAIN_CHANNEL }}
           SHAZAM_DISCORD_CHANNEL_ID: ${{ secrets.SHAZAM_DISCORD_CHANNEL_ID }}
           SHAZAM_IRC_CHANNEL: ${{ secrets.SHAZAM_IRC_CHANNEL }}
+          SHAZAM_EMOJI: ${{ secrets.SHAZAM_EMOJI }}
 
       - name: Copy compose.yaml and .env to server
         uses: appleboy/scp-action@v0.1.4

@@ -43,6 +43,7 @@ async fn main() {
         .expect("SHAZAM_DISCORD_CHANNEL_ID must be a number");
     let shazam_irc_channel =
         env::var("SHAZAM_IRC_CHANNEL").expect("SHAZAM_IRC_CHANNEL must be set");
+    let shazam_emoji = env::var("SHAZAM_EMOJI").ok().filter(|s| !s.is_empty());
 
     let context = Context {
         discord_http,
@@ -55,6 +56,7 @@ async fn main() {
         last_track: Arc::new(RwLock::new(None)),
         shazam_discord_channel,
         shazam_irc_channel,
+        shazam_emoji,
         shazam_active: Arc::new(AtomicBool::new(false)),
         np_state: Arc::new(Mutex::new(NpState {
             message_id: None,

@@ -320,7 +320,9 @@ pub(crate) async fn now_playing_loop(context: Context) {
                 let track_id = format!("{} - {}", artist, title);
                 let streamer_prefix = if is_live
                     && !live.streamer_name.is_empty()
-                    && !artist.to_lowercase().contains(&live.streamer_name.to_lowercase())
+                    && !artist
+                        .to_lowercase()
+                        .contains(&live.streamer_name.to_lowercase())
                 {
                     format!("{} - ", live.streamer_name)
                 } else {
@@ -346,7 +348,7 @@ pub(crate) async fn now_playing_loop(context: Context) {
                             > chrono::Duration::seconds(now_playing_live_interval));
 
                 if track_changed && !is_live && duration <= 1200 {
-                    context.send_shazam(&track_id).await;
+                    context.send_shazam(&track_id, false).await;
                 }
 
                 if send_message {

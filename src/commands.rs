@@ -75,7 +75,9 @@ async fn now_playing(context: &Context) -> Result<()> {
     let is_live = now_playing_response.live.is_live;
     let streamer_prefix = if is_live
         && !now_playing_response.live.streamer_name.is_empty()
-        && !artist.to_lowercase().contains(&now_playing_response.live.streamer_name.to_lowercase())
+        && !artist
+            .to_lowercase()
+            .contains(&now_playing_response.live.streamer_name.to_lowercase())
     {
         format!("{} - ", now_playing_response.live.streamer_name)
     } else {
@@ -86,7 +88,11 @@ async fn now_playing(context: &Context) -> Result<()> {
     let time_str = if is_live || duration == 0 {
         format!(" [{}]", format_duration(elapsed))
     } else {
-        format!(" [{}/{}]", format_duration(elapsed), format_duration(duration))
+        format!(
+            " [{}/{}]",
+            format_duration(elapsed),
+            format_duration(duration)
+        )
     };
     context
         .send_message(&format!(
