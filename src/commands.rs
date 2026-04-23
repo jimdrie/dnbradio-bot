@@ -186,7 +186,8 @@ async fn boh(context: &Context, factor: usize, reverse: bool) -> Result<()> {
 
 async fn schedule(context: &Context) -> Result<()> {
     let schedule = api::get_schedule().await?;
-    let mut schedule_string = String::new();
+    let mut irc_string = String::new();
+    let mut discord_string = String::new();
     for (start, _, title) in schedule {
         let time_difference = (chrono::Utc::now() - start).num_minutes();
         let mut time_difference_string = if time_difference > -60 {
@@ -199,11 +200,14 @@ async fn schedule(context: &Context) -> Result<()> {
         } else {
             time_difference_string = format!("Starts in {}", time_difference_string);
         }
-        schedule_string.push_str(&format!("{}: {}\n", time_difference_string, title));
+        irc_string.push_str(&format!("{}: {}\n", time_difference_string, title));
+        discord_string.push_str(&format!("<t:{}:t> (<t:{}:R>): {}\n", start.timestamp(), start.timestamp(), title));
     }
-    schedule_string
-        .push_str("For additional info check https://dnbradio.com/player/stations/1/schedule/");
-    context.send_message(&schedule_string).await;
+    let url = "For additional info check https://dnbradio.com/player/stations/1/schedule/";
+    irc_string.push_str(url);
+    discord_string.push_str(url);
+    context.send_to_irc(&irc_string, None).await;
+    context.send_to_discord(&discord_string).await;
     Ok(())
 }
 
