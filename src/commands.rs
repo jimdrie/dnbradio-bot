@@ -203,9 +203,8 @@ async fn schedule(context: &Context) -> Result<()> {
         irc_string.push_str(&format!("{}: {}\n", time_difference_string, title));
         discord_string.push_str(&format!("<t:{}:t> (<t:{}:R>): {}\n", start.timestamp(), start.timestamp(), title));
     }
-    let url = "For additional info check https://dnbradio.com/player/stations/1/schedule/";
-    irc_string.push_str(url);
-    discord_string.push_str(url);
+    irc_string.push_str("For additional info check https://dnbradio.com/player/stations/1/schedule/");
+    discord_string.push_str("For additional info check [the full schedule on our website](<https://dnbradio.com/player/stations/1/schedule/>)");
     context.send_to_irc(&irc_string, None).await;
     context.send_to_discord(&discord_string).await;
     Ok(())
